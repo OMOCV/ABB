@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ABB Robot Program Reader</string>
+    <string name="select_file">选择 ABB 程序文件</string>
+    <string name="no_file_selected">未选择文件</string>
+    <string name="file_error">文件读取错误</string>
+    <string name="open_file">打开文件</string>
+    <string name="module_label">模块</string>
+    <string name="routine_label">例行程序</string>
+    <string name="file_content">文件内容</string>
+    <string name="supported_formats">支持的格式: .mod, .prg, .sys</string>
+</resources>

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    
+    <!-- ABB brand colors -->
+    <color name="abb_primary">#FF0000</color>
+    <color name="abb_primary_dark">#CC0000</color>
+    <color name="abb_accent">#FF6600</color>
+    <color name="abb_accent_dark">#CC5200</color>
+    
+    <!-- Syntax highlighting colors -->
+    <color name="syntax_keyword">#0000FF</color>
+    <color name="syntax_string">#008000</color>
+    <color name="syntax_comment">#808080</color>
+    <color name="syntax_number">#FF00FF</color>
+    <color name="syntax_function">#800080</color>
+    <color name="syntax_type">#2B91AF</color>
+    <color name="syntax_default">#000000</color>
+</resources>
