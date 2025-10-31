@@ -108,6 +108,21 @@ cd Android
 
 或者在 Android Studio 中点击 Run 按钮
 
+### 使用 GitHub Actions 构建
+
+项目配置了自动构建工作流，可以在 GitHub Actions 中构建 APK:
+
+1. 进入仓库的 Actions 标签页
+2. 选择 "Build APK" 工作流
+3. 点击 "Run workflow" 手动触发构建
+4. 构建完成后，从 Artifacts 下载生成的 APK 文件
+
+APK 输出位置:
+- Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
+- Release APK: `app/build/outputs/apk/release/app-release.apk`
+
+更多构建选项请参见 [BUILDING.md](BUILDING.md) 和 [BUILD_RESTRICTED.md](BUILD_RESTRICTED.md)
+
 ## 使用方法
 
 1. 启动应用
