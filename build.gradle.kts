@@ -1,7 +1,9 @@
 // Top-level build file where you can add configuration options common to all sub-projects/modules.
 buildscript {
     repositories {
-        google()
+        maven {
+            url = uri("https://maven.google.com")
+        }
         mavenCentral()
     }
     dependencies {
@@ -12,7 +14,9 @@ buildscript {
 
 allprojects {
     repositories {
-        google()
+        maven {
+            url = uri("https://maven.google.com")
+        }
         mavenCentral()
     }
 }
