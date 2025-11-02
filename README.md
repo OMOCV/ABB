@@ -273,6 +273,19 @@ ENDMODULE
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 打开 Pull Request
 
+更多详情请参见 [CONTRIBUTING.md](CONTRIBUTING.md)
+
+## 文档 / Documentation
+
+- 📖 [README.md](README.md) - 项目介绍 / Project introduction
+- 🔨 [BUILDING.md](BUILDING.md) - 构建指南 / Build guide
+- 🚀 [QUICK_RELEASE.md](QUICK_RELEASE.md) - 快速发布指南 / Quick release guide
+- 📋 [RELEASE.md](RELEASE.md) - 完整发布指南 / Complete release guide
+- 📊 [BUILD_PUBLISH_SUMMARY.md](BUILD_PUBLISH_SUMMARY.md) - 构建发布总结 / Build & publish summary
+- 📝 [CHANGELOG.md](CHANGELOG.md) - 变更日志 / Changelog
+- 💡 [EXAMPLES.md](EXAMPLES.md) - 使用示例 / Usage examples
+- 🤝 [CONTRIBUTING.md](CONTRIBUTING.md) - 贡献指南 / Contributing guide
+
 ## 许可证
 
 本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
