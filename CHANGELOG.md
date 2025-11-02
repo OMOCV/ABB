@@ -100,6 +100,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased] / 未发布
 
+### Added / 新增
+- ✅ GitHub Actions 自动构建和发布工作流
+  - 自动构建 Debug 和 Release APK
+  - 版本标签触发自动发布
+  - 生成 SHA256 校验和文件
+  - 自动创建 GitHub Release
+  - APK 文件自动上传到 Release
+- ✅ 发布文档 (RELEASE.md)
+  - 完整的发布流程指南
+  - APK 签名配置说明
+  - 版本管理最佳实践
+- ✅ README 增强
+  - 添加构建状态徽章
+  - 添加下载和安装说明
+  - 完善发布流程文档
+
 ### Planned / 计划中
 - [ ] 添加代码搜索功能
 - [ ] 支持多文件项目浏览

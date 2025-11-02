@@ -1,0 +1,143 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Create Release and Build APK
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
+    
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+    
+    - name: Get version from tag
+      id: version
+      run: |
+        VERSION=${GITHUB_REF#refs/tags/}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+        
+        # Extract changelog for this version from CHANGELOG.md if it exists
+        if [ -f CHANGELOG.md ]; then
+          echo "Reading changelog..."
+        fi
+    
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug --no-daemon --stacktrace
+    
+    - name: Build Release APK (unsigned)
+      run: ./gradlew assembleRelease --no-daemon --stacktrace
+      continue-on-error: true
+      id: release-build
+    
+    - name: Prepare release artifacts
+      run: |
+        mkdir -p release
+        VERSION=${{ steps.version.outputs.version }}
+        
+        # Copy and rename debug APK
+        if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+          cp app/build/outputs/apk/debug/app-debug.apk release/ABB-${VERSION}-debug.apk
+          echo "✓ Debug APK prepared"
+        fi
+        
+        # Copy and rename release APK if it was built
+        if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+          cp app/build/outputs/apk/release/app-release-unsigned.apk release/ABB-${VERSION}-release-unsigned.apk
+          echo "✓ Release APK prepared (unsigned)"
+        fi
+        
+        if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+          cp app/build/outputs/apk/release/app-release.apk release/ABB-${VERSION}-release.apk
+          echo "✓ Release APK prepared (signed)"
+        fi
+        
+        # Generate checksums
+        cd release
+        sha256sum *.apk > checksums-sha256.txt
+        cd ..
+        
+        echo "=== Release artifacts ==="
+        ls -lh release/
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: release/*
+        draft: false
+        prerelease: ${{ contains(steps.version.outputs.version, 'alpha') || contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'rc') }}
+        generate_release_notes: true
+        body: |
+          ## 📱 ABB Robot Program Reader - ${{ steps.version.outputs.version }}
+          
+          ### 下载 / Downloads
+          
+          选择合适的 APK 文件下载：/ Choose the appropriate APK file to download:
+          
+          - **`ABB-${{ steps.version.outputs.version }}-debug.apk`**
+            - 🔧 开发和测试版本 / Development and testing version
+            - 📦 包含调试符号 / Includes debug symbols
+            - ⚠️ 性能可能较慢 / May have slower performance
+          
+          - **`ABB-${{ steps.version.outputs.version }}-release-unsigned.apk`**
+            - 🚀 生产版本（未签名）/ Production version (unsigned)
+            - ✨ 优化性能 / Optimized performance
+            - ⚠️ 可能需要特殊权限安装 / May require special permissions to install
+          
+          ### 📋 系统要求 / System Requirements
+          
+          - Android 7.0 (API 24) 或更高版本 / or higher
+          - 最少 50 MB 可用存储空间 / Minimum 50 MB free storage
+          
+          ### 🔧 安装步骤 / Installation Steps
+          
+          1. 📥 下载对应的 APK 文件 / Download the appropriate APK file
+          2. ⚙️ 在 Android 设备上启用"未知来源"安装 / Enable "Install from Unknown Sources" on your Android device
+             - 设置 → 安全 → 未知来源 / Settings → Security → Unknown Sources
+          3. 📲 点击 APK 文件进行安装 / Tap the APK file to install
+          4. ✅ 按照提示完成安装 / Follow the prompts to complete installation
+          
+          ### 🔐 校验文件完整性 / Verify File Integrity
+          
+          下载 `checksums-sha256.txt` 文件，使用以下命令验证 / Download `checksums-sha256.txt` and verify using:
+          
+          ```bash
+          sha256sum -c checksums-sha256.txt
+          ```
+          
+          ### 📝 变更日志 / Changelog
+          
+          查看下方自动生成的发行说明 / See auto-generated release notes below
+          
+          ### 🐛 问题反馈 / Bug Reports
+          
+          如有问题，请在 [Issues](https://github.com/OMOCV/Android/issues) 页面反馈 / 
+          For issues, please report on the [Issues](https://github.com/OMOCV/Android/issues) page
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Upload artifacts for reference
+      uses: actions/upload-artifact@v4
+      with:
+        name: release-artifacts-${{ steps.version.outputs.version }}
+        path: release/
+        retention-days: 90
