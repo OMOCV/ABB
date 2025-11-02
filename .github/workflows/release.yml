@@ -33,6 +33,8 @@ jobs:
       id: version
       run: |
         VERSION=${GITHUB_REF#refs/tags/}
+        # Sanitize version string for filenames (remove invalid characters)
+        VERSION=$(echo "$VERSION" | sed 's/[^a-zA-Z0-9._-]/-/g')
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Version: $VERSION"
         
@@ -71,9 +73,14 @@ jobs:
           echo "✓ Release APK prepared (signed)"
         fi
         
-        # Generate checksums
+        # Generate checksums - only if APK files exist
         cd release
-        sha256sum *.apk > checksums-sha256.txt
+        if ls *.apk 1> /dev/null 2>&1; then
+          sha256sum *.apk > checksums-sha256.txt
+          echo "✓ Checksums generated"
+        else
+          echo "⚠️ No APK files found, skipping checksum generation"
+        fi
         cd ..
         
         echo "=== Release artifacts ==="
