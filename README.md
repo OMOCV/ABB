@@ -1,5 +1,10 @@
 # ABB Robot Program Reader for Android
 
+[![Build APK](https://github.com/OMOCV/Android/actions/workflows/build-apk.yml/badge.svg)](https://github.com/OMOCV/Android/actions/workflows/build-apk.yml)
+[![Release](https://github.com/OMOCV/Android/actions/workflows/release.yml/badge.svg)](https://github.com/OMOCV/Android/actions/workflows/release.yml)
+[![GitHub release](https://img.shields.io/github/v/release/OMOCV/Android)](https://github.com/OMOCV/Android/releases/latest)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 这是一个用于读取和查看 ABB 机器人程序的 Android 应用程序。
 
 ## 功能特性
@@ -108,14 +113,44 @@ cd Android
 
 或者在 Android Studio 中点击 Run 按钮
 
+## 下载安装 / Download & Install
+
+### 从 GitHub Releases 下载 / Download from GitHub Releases
+
+最简单的方式是从 [Releases](https://github.com/OMOCV/Android/releases) 页面下载最新版本的 APK 文件：
+
+1. 访问 [最新版本](https://github.com/OMOCV/Android/releases/latest)
+2. 下载 APK 文件（推荐下载 Debug 版本用于测试）
+3. 在 Android 设备上安装
+
 ### 使用 GitHub Actions 构建
 
 项目配置了自动构建工作流，可以在 GitHub Actions 中构建 APK:
 
-1. 进入仓库的 Actions 标签页
+#### 开发构建 / Development Builds
+
+1. 进入仓库的 [Actions](https://github.com/OMOCV/Android/actions) 标签页
 2. 选择 "Build APK" 工作流
 3. 点击 "Run workflow" 手动触发构建
 4. 构建完成后，从 Artifacts 下载生成的 APK 文件
+
+#### 正式发布 / Release Builds
+
+创建版本发布：
+
+```bash
+# 创建版本标签
+git tag -a v1.0.0 -m "Release version 1.0.0"
+
+# 推送标签到 GitHub
+git push origin v1.0.0
+```
+
+推送标签后，GitHub Actions 会自动：
+- 构建 Debug 和 Release APK
+- 创建 GitHub Release
+- 上传 APK 文件到 Release
+- 生成 SHA256 校验文件
 
 APK 输出位置:
 - Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
@@ -237,6 +272,19 @@ ENDMODULE
 3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
 4. 推送到分支 (`git push origin feature/AmazingFeature`)
 5. 打开 Pull Request
+
+更多详情请参见 [CONTRIBUTING.md](CONTRIBUTING.md)
+
+## 文档 / Documentation
+
+- 📖 [README.md](README.md) - 项目介绍 / Project introduction
+- 🔨 [BUILDING.md](BUILDING.md) - 构建指南 / Build guide
+- 🚀 [QUICK_RELEASE.md](QUICK_RELEASE.md) - 快速发布指南 / Quick release guide
+- 📋 [RELEASE.md](RELEASE.md) - 完整发布指南 / Complete release guide
+- 📊 [BUILD_PUBLISH_SUMMARY.md](BUILD_PUBLISH_SUMMARY.md) - 构建发布总结 / Build & publish summary
+- 📝 [CHANGELOG.md](CHANGELOG.md) - 变更日志 / Changelog
+- 💡 [EXAMPLES.md](EXAMPLES.md) - 使用示例 / Usage examples
+- 🤝 [CONTRIBUTING.md](CONTRIBUTING.md) - 贡献指南 / Contributing guide
 
 ## 许可证
 

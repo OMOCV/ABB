@@ -269,8 +269,45 @@ jobs:
         path: app/build/outputs/apk/debug/app-debug.apk
 ```
 
+## 发布和分发 / Release and Distribution
+
+### 创建发布版本 / Creating a Release
+
+要创建新的发布版本，请按照以下步骤操作：
+
+1. **更新版本号** - 在 `app/build.gradle.kts` 中更新 `versionCode` 和 `versionName`
+2. **更新变更日志** - 在 `CHANGELOG.md` 中记录所有变更
+3. **创建版本标签** - 使用 Git 标签标记版本
+4. **推送标签** - 触发自动构建和发布
+
+示例：
+```bash
+# 更新代码并提交
+git add .
+git commit -m "Prepare for release v1.1.0"
+
+# 创建并推送标签
+git tag -a v1.1.0 -m "Release version 1.1.0"
+git push origin v1.1.0
+```
+
+GitHub Actions 会自动：
+- 构建 Debug 和 Release APK
+- 创建 GitHub Release
+- 上传 APK 文件
+- 生成校验和文件
+
+详细的发布流程请参阅 [RELEASE.md](RELEASE.md)。
+
+### 下载发布版本 / Downloading Releases
+
+最新版本可从以下位置获取：
+- [GitHub Releases](https://github.com/OMOCV/Android/releases/latest)
+- [Actions Artifacts](https://github.com/OMOCV/Android/actions) (开发版本)
+
 ## 更多资源 / Additional Resources
 
+- [发布指南 / Release Guide](RELEASE.md)
 - [Android 开发者文档](https://developer.android.com/docs)
 - [Kotlin 语言文档](https://kotlinlang.org/docs/home.html)
 - [Gradle 用户指南](https://docs.gradle.org/current/userguide/userguide.html)

@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
   push:
     branches: [ main, develop ]
+    tags:
+      - 'v*'
   pull_request:
     branches: [ main, develop ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -17,6 +19,8 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     
     - name: Set up JDK 17
       uses: actions/setup-java@v4
@@ -27,6 +31,19 @@ jobs:
     
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
+    
+    - name: Get version info
+      id: version
+      run: |
+        if [[ $GITHUB_REF == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev-$(git rev-parse --short HEAD)")
+        fi
+        # Sanitize version string for filenames (remove invalid characters)
+        VERSION=$(echo "$VERSION" | sed 's/[^a-zA-Z0-9._-]/-/g')
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
     
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon --stacktrace
@@ -43,11 +60,25 @@ jobs:
         echo "⚠️ Release build failed - this is expected if signing configuration is not set up"
         echo "See BUILDING.md for information on configuring release signing"
     
+    - name: Rename APK files
+      run: |
+        mkdir -p dist
+        if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+          cp app/build/outputs/apk/debug/app-debug.apk dist/ABB-${{ steps.version.outputs.version }}-debug.apk
+        fi
+        if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
+          cp app/build/outputs/apk/release/app-release-unsigned.apk dist/ABB-${{ steps.version.outputs.version }}-release-unsigned.apk
+        fi
+        if [ -f app/build/outputs/apk/release/app-release.apk ]; then
+          cp app/build/outputs/apk/release/app-release.apk dist/ABB-${{ steps.version.outputs.version }}-release.apk
+        fi
+        ls -lh dist/
+    
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: app-debug-${{ steps.version.outputs.version }}
+        path: dist/*-debug.apk
         if-no-files-found: error
     
     # Upload release APK only if it was built successfully
@@ -55,8 +86,8 @@ jobs:
       uses: actions/upload-artifact@v4
       if: steps.release-build.outcome == 'success'
       with:
-        name: app-release
-        path: app/build/outputs/apk/release/*.apk
+        name: app-release-${{ steps.version.outputs.version }}
+        path: dist/*-release*.apk
         if-no-files-found: warn
     
     - name: List APK outputs
@@ -67,3 +98,6 @@ jobs:
         echo ""
         echo "=== Release APK ==="
         ls -lh app/build/outputs/apk/release/ || echo "No release APK found"
+        echo ""
+        echo "=== Distribution APKs ==="
+        ls -lh dist/ || echo "No dist folder found"
