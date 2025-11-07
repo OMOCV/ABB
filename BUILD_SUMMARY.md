@@ -1,11 +1,11 @@
 # ABB Android Project - Build Summary
 
 ## Task
-Build and compile the existing ABB project into an APK file (构建编译 ABB 项目成 APK 文件)
+Build and compile the existing ABB project into APK and AAB files (构建编译 ABB 项目成 APK 和 AAB 文件)
 
 ## Current Status: READY FOR BUILD VIA GITHUB ACTIONS
 
-The project is properly configured and ready to build, but requires network access to `dl.google.com` for dependency downloads.
+The project is properly configured and ready to build APK and AAB files, but requires network access to `dl.google.com` for dependency downloads.
 
 ## What Was Done
 
@@ -31,7 +31,8 @@ The project is properly configured and ready to build, but requires network acce
   - Automatic builds on push to main/develop branches
   - Manual trigger option (workflow_dispatch)
   - Builds both debug and release APKs
-  - Uploads APK artifacts for download
+  - Builds both debug and release AABs
+  - Uploads APK and AAB artifacts for download
   - Caches Gradle dependencies for faster builds
 
 ### 4. Documentation ✅
@@ -65,17 +66,22 @@ The project now has a GitHub Actions workflow that will build the APK in GitHub'
 
 **After workflow completes:**
 - Download `app-debug.apk` from workflow artifacts
+- Download `app-debug.aab` from workflow artifacts
 - Download `app-release.apk` from workflow artifacts (if release build succeeds)
+- Download `app-release.aab` from workflow artifacts (if release build succeeds)
 
 ### Option 2: Local Build with Network Access
 If building locally:
 1. Ensure `dl.google.com` is accessible in your network
-2. Run: `./gradlew assembleDebug`
-3. APK location: `app/build/outputs/apk/debug/app-debug.apk`
+2. Build APK: `./gradlew assembleDebug`
+3. Build AAB: `./gradlew bundleDebug`
+4. APK location: `app/build/outputs/apk/debug/app-debug.apk`
+5. AAB location: `app/build/outputs/bundle/debug/app-debug.aab`
 
 ### Option 3: Android Studio
 Open the project in Android Studio and use:
-- Build → Build Bundle(s) / APK(s) → Build APK(s)
+- Build → Build Bundle(s) / APK(s) → Build APK(s) - for APK files
+- Build → Build Bundle(s) / APK(s) → Build Bundle(s) - for AAB files
 
 ## Expected Output
 
@@ -87,10 +93,21 @@ When successfully built, you will get:
 - Ready to install: Yes
 - File size: ~5-10 MB (estimated)
 
+**Debug AAB:**
+- Location: `app/build/outputs/bundle/debug/app-debug.aab`
+- Signed: Yes (debug keystore)
+- Ready to install: No (requires bundletool or Google Play)
+- File size: ~5-10 MB (estimated)
+
 **Release APK (unsigned):**
 - Location: `app/build/outputs/apk/release/app-release-unsigned.apk`
 - Signed: No (requires release keystore configuration)
 - Ready to install: After signing
+
+**Release AAB:**
+- Location: `app/build/outputs/bundle/release/app-release.aab`
+- Signed: No (requires release keystore configuration)
+- Ready for Google Play: After signing
 
 ## Files Changed in This PR
 
@@ -107,8 +124,9 @@ When successfully built, you will get:
 
 ## Testing the Build
 
-Once the APK is built, you can verify it:
+Once the files are built, you can verify them:
 
+### For APK files:
 ```bash
 # Check APK info
 aapt dump badging app-debug.apk
@@ -120,6 +138,26 @@ adb install app-debug.apk
 ./gradlew installDebug
 ```
 
+### For AAB files:
+```bash
+# Download bundletool from:
+# https://github.com/google/bundletool/releases
+
+# Generate APKs from AAB
+java -jar bundletool.jar build-apks \
+  --bundle=app-debug.aab \
+  --output=app.apks
+
+# Install to connected device
+java -jar bundletool.jar install-apks --apks=app.apks
+
+# Or generate universal APK
+java -jar bundletool.jar build-apks \
+  --bundle=app-debug.aab \
+  --output=app.apks \
+  --mode=universal
+```
+
 ## Support
 
 - Main documentation: [README.md](README.md)
@@ -129,4 +167,4 @@ adb install app-debug.apk
 
 ---
 
-**Summary:** The ABB Android project is fully configured and ready to build APK files. Due to network restrictions in the current environment, use the GitHub Actions workflow (recommended) or build in an environment with access to dl.google.com.
+**Summary:** The ABB Android project is fully configured and ready to build both APK and AAB files. Due to network restrictions in the current environment, use the GitHub Actions workflow (recommended) or build in an environment with access to dl.google.com.

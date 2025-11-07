@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   release:
-    name: Create Release and Build APK
+    name: Create Release and Build APK/AAB
     runs-on: ubuntu-latest
     
     steps:
@@ -46,10 +46,18 @@ jobs:
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon --stacktrace
     
+    - name: Build Debug AAB
+      run: ./gradlew bundleDebug --no-daemon --stacktrace
+    
     - name: Build Release APK (unsigned)
       run: ./gradlew assembleRelease --no-daemon --stacktrace
       continue-on-error: true
-      id: release-build
+      id: release-apk-build
+    
+    - name: Build Release AAB
+      run: ./gradlew bundleRelease --no-daemon --stacktrace
+      continue-on-error: true
+      id: release-aab-build
     
     - name: Prepare release artifacts
       run: |
@@ -60,6 +68,12 @@ jobs:
         if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
           cp app/build/outputs/apk/debug/app-debug.apk release/ABB-${VERSION}-debug.apk
           echo "✓ Debug APK prepared"
+        fi
+        
+        # Copy and rename debug AAB
+        if [ -f app/build/outputs/bundle/debug/app-debug.aab ]; then
+          cp app/build/outputs/bundle/debug/app-debug.aab release/ABB-${VERSION}-debug.aab
+          echo "✓ Debug AAB prepared"
         fi
         
         # Copy and rename release APK if it was built
@@ -73,16 +87,27 @@ jobs:
           echo "✓ Release APK prepared (signed)"
         fi
         
-        # Generate checksums - only if APK files exist
+        # Copy and rename release AAB if it was built
+        if [ -f app/build/outputs/bundle/release/app-release.aab ]; then
+          cp app/build/outputs/bundle/release/app-release.aab release/ABB-${VERSION}-release.aab
+          echo "✓ Release AAB prepared"
+        fi
+        
+        # Generate checksums for all files
         cd release
-        if ls *.apk 1> /dev/null 2>&1; then
-          sha256sum *.apk > checksums-sha256.txt
+        if [ -n "$(ls -A 2>/dev/null)" ]; then
+          for file in *; do
+            if [ -f "$file" ]; then
+              sha256sum "$file" >> checksums-sha256.txt
+            fi
+          done
           echo "✓ Checksums generated"
         else
-          echo "⚠️ No APK files found, skipping checksum generation"
+          echo "⚠️ No files found, skipping checksum generation"
         fi
         cd ..
         
+        echo ""
         echo "=== Release artifacts ==="
         ls -lh release/
     
@@ -98,17 +123,39 @@ jobs:
           
           ### 下载 / Downloads
           
-          选择合适的 APK 文件下载：/ Choose the appropriate APK file to download:
+          选择合适的文件下载：/ Choose the appropriate file to download:
+          
+          #### APK 文件 (Android Package)
           
           - **`ABB-${{ steps.version.outputs.version }}-debug.apk`**
             - 🔧 开发和测试版本 / Development and testing version
             - 📦 包含调试符号 / Includes debug symbols
             - ⚠️ 性能可能较慢 / May have slower performance
+            - 📲 可直接安装到设备 / Can be installed directly to devices
           
           - **`ABB-${{ steps.version.outputs.version }}-release-unsigned.apk`**
             - 🚀 生产版本（未签名）/ Production version (unsigned)
             - ✨ 优化性能 / Optimized performance
             - ⚠️ 可能需要特殊权限安装 / May require special permissions to install
+            - 📲 可直接安装到设备 / Can be installed directly to devices
+          
+          #### AAB 文件 (Android App Bundle)
+          
+          - **`ABB-${{ steps.version.outputs.version }}-debug.aab`**
+            - 🔧 开发和测试版本 / Development and testing version
+            - 📦 Google Play 推荐格式 / Google Play recommended format
+            - ⚠️ 需要通过 bundletool 或 Google Play 安装 / Requires bundletool or Google Play for installation
+          
+          - **`ABB-${{ steps.version.outputs.version }}-release.aab`**
+            - 🚀 生产版本 / Production version
+            - 📱 适合上传到 Google Play Store / Suitable for uploading to Google Play Store
+            - ✨ 优化的应用大小 / Optimized app size
+            - 🎯 根据设备配置优化 / Optimized per-device configuration
+          
+          **注意 / Note:** 
+          - APK 文件可直接安装到设备 / APK files can be installed directly to devices
+          - AAB 文件主要用于 Google Play Store 分发 / AAB files are primarily for Google Play Store distribution
+          - 如需从 AAB 安装，请使用 bundletool / To install from AAB, use bundletool
           
           ### 📋 系统要求 / System Requirements
           
@@ -117,11 +164,30 @@ jobs:
           
           ### 🔧 安装步骤 / Installation Steps
           
+          #### 使用 APK 文件 / Using APK files
+          
           1. 📥 下载对应的 APK 文件 / Download the appropriate APK file
           2. ⚙️ 在 Android 设备上启用"未知来源"安装 / Enable "Install from Unknown Sources" on your Android device
              - 设置 → 安全 → 未知来源 / Settings → Security → Unknown Sources
           3. 📲 点击 APK 文件进行安装 / Tap the APK file to install
           4. ✅ 按照提示完成安装 / Follow the prompts to complete installation
+          
+          #### 使用 AAB 文件 / Using AAB files
+          
+          AAB 文件需要使用 bundletool 转换为 APK 后再安装 / AAB files need to be converted to APK using bundletool:
+          
+          ```bash
+          # 下载 bundletool / Download bundletool
+          # https://github.com/google/bundletool/releases
+          
+          # 从 AAB 生成 APKs / Generate APKs from AAB
+          java -jar bundletool.jar build-apks --bundle=ABB-${{ steps.version.outputs.version }}-release.aab --output=app.apks
+          
+          # 安装到连接的设备 / Install to connected device
+          java -jar bundletool.jar install-apks --apks=app.apks
+          ```
+          
+          或直接上传 AAB 文件到 Google Play Console / Or upload AAB file directly to Google Play Console
           
           ### 🔐 校验文件完整性 / Verify File Integrity
           

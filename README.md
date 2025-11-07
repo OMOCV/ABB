@@ -106,9 +106,13 @@ cd Android
 
 3. 同步 Gradle 并下载依赖
 
-4. 构建并运行:
+4. 构建 APK 或 AAB:
 ```bash
+# 构建 APK
 ./gradlew assembleDebug
+
+# 构建 AAB (Android App Bundle)
+./gradlew bundleDebug
 ```
 
 或者在 Android Studio 中点击 Run 按钮
@@ -117,22 +121,24 @@ cd Android
 
 ### 从 GitHub Releases 下载 / Download from GitHub Releases
 
-最简单的方式是从 [Releases](https://github.com/OMOCV/Android/releases) 页面下载最新版本的 APK 文件：
+最简单的方式是从 [Releases](https://github.com/OMOCV/Android/releases) 页面下载最新版本的文件：
 
 1. 访问 [最新版本](https://github.com/OMOCV/Android/releases/latest)
-2. 下载 APK 文件（推荐下载 Debug 版本用于测试）
-3. 在 Android 设备上安装
+2. 下载文件：
+   - **APK 文件** - 可直接安装到 Android 设备
+   - **AAB 文件** - 用于 Google Play Store 发布或使用 bundletool 安装
+3. 在 Android 设备上安装 APK，或使用 bundletool 从 AAB 生成 APK
 
 ### 使用 GitHub Actions 构建
 
-项目配置了自动构建工作流，可以在 GitHub Actions 中构建 APK:
+项目配置了自动构建工作流，可以在 GitHub Actions 中构建 APK 和 AAB:
 
 #### 开发构建 / Development Builds
 
 1. 进入仓库的 [Actions](https://github.com/OMOCV/Android/actions) 标签页
-2. 选择 "Build APK" 工作流
+2. 选择 "Build APK and AAB" 工作流
 3. 点击 "Run workflow" 手动触发构建
-4. 构建完成后，从 Artifacts 下载生成的 APK 文件
+4. 构建完成后，从 Artifacts 下载生成的 APK 或 AAB 文件
 
 #### 正式发布 / Release Builds
 
@@ -148,13 +154,16 @@ git push origin v1.0.0
 
 推送标签后，GitHub Actions 会自动：
 - 构建 Debug 和 Release APK
+- 构建 Debug 和 Release AAB
 - 创建 GitHub Release
-- 上传 APK 文件到 Release
+- 上传 APK 和 AAB 文件到 Release
 - 生成 SHA256 校验文件
 
-APK 输出位置:
+输出文件位置:
 - Debug APK: `app/build/outputs/apk/debug/app-debug.apk`
 - Release APK: `app/build/outputs/apk/release/app-release.apk`
+- Debug AAB: `app/build/outputs/bundle/debug/app-debug.aab`
+- Release AAB: `app/build/outputs/bundle/release/app-release.aab`
 
 更多构建选项请参见 [BUILDING.md](BUILDING.md) 和 [BUILD_RESTRICTED.md](BUILD_RESTRICTED.md)
 

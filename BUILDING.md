@@ -90,15 +90,109 @@
    gradlew.bat assembleRelease
    ```
 
-4. **安装到设备**
+4. **构建 Debug AAB (Android App Bundle)**
+   ```bash
+   # Unix/Linux/macOS
+   ./gradlew bundleDebug
+   
+   # Windows
+   gradlew.bat bundleDebug
+   ```
+
+5. **构建 Release AAB (Android App Bundle)**
+   ```bash
+   # Unix/Linux/macOS
+   ./gradlew bundleRelease
+   
+   # Windows
+   gradlew.bat bundleRelease
+   ```
+
+6. **安装到设备**
    ```bash
    # 确保设备已连接并且 USB 调试已启用
    ./gradlew installDebug
    ```
 
-5. **APK 位置 / APK Location**
+7. **输出文件位置 / Output File Locations**
+   
+   **APK 文件:**
    - Debug: `app/build/outputs/apk/debug/app-debug.apk`
    - Release: `app/build/outputs/apk/release/app-release-unsigned.apk`
+   
+   **AAB 文件:**
+   - Debug: `app/build/outputs/bundle/debug/app-debug.aab`
+   - Release: `app/build/outputs/bundle/release/app-release.aab`
+
+## APK vs AAB / APK 与 AAB 的区别
+
+### APK (Android Package)
+
+**优点 / Advantages:**
+- ✅ 可直接安装到 Android 设备 / Can be installed directly to Android devices
+- ✅ 适合直接分发和测试 / Suitable for direct distribution and testing
+- ✅ 不需要额外工具 / No additional tools required
+- ✅ 适合侧载安装 / Good for side-loading
+
+**缺点 / Disadvantages:**
+- ❌ 包含所有设备配置的资源 / Contains resources for all device configurations
+- ❌ 文件体积较大 / Larger file size
+- ❌ 用户下载的应用较大 / Users download larger apps
+
+**使用场景 / Use Cases:**
+- 开发和测试 / Development and testing
+- 直接分发给用户 / Direct distribution to users
+- 企业内部分发 / Enterprise distribution
+- 不通过 Google Play 分发 / Distribution outside Google Play
+
+### AAB (Android App Bundle)
+
+**优点 / Advantages:**
+- ✅ Google Play 推荐格式 / Google Play recommended format
+- ✅ 根据设备自动优化 / Automatically optimized per device
+- ✅ 减小用户下载大小 / Reduces download size for users
+- ✅ 支持动态功能模块 / Supports dynamic feature modules
+- ✅ 支持按需资源加载 / Supports on-demand resource loading
+
+**缺点 / Disadvantages:**
+- ❌ 不能直接安装到设备 / Cannot be installed directly to devices
+- ❌ 需要通过 Google Play 或 bundletool / Requires Google Play or bundletool
+- ❌ 测试时需要额外步骤 / Requires additional steps for testing
+
+**使用场景 / Use Cases:**
+- 上传到 Google Play Store / Uploading to Google Play Store
+- 生产环境发布 / Production releases
+- 优化应用大小 / Optimizing app size
+- 大型应用分发 / Large app distribution
+
+### 如何选择 / How to Choose
+
+- **开发和测试**: 使用 APK / Use APK
+- **Google Play 发布**: 使用 AAB / Use AAB
+- **直接分发**: 使用 APK / Use APK
+- **优化下载大小**: 使用 AAB (通过 Google Play) / Use AAB (via Google Play)
+
+### 从 AAB 生成 APK / Generate APK from AAB
+
+如果需要从 AAB 文件生成 APK 进行测试，可以使用 bundletool:
+
+```bash
+# 1. 下载 bundletool
+# https://github.com/google/bundletool/releases
+
+# 2. 生成 APK 集合
+java -jar bundletool.jar build-apks \
+  --bundle=app/build/outputs/bundle/release/app-release.aab \
+  --output=app.apks \
+  --mode=universal
+
+# 3. 提取通用 APK
+unzip app.apks -d extracted_apks
+# 通用 APK 位于: extracted_apks/universal.apk
+
+# 或者直接安装到连接的设备
+java -jar bundletool.jar install-apks --apks=app.apks
+```
 
 ## 签名发布版本 / Signing Release Version
 

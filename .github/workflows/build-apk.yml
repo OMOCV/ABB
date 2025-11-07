@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK and AAB
 
 on:
   workflow_dispatch:
@@ -48,49 +48,91 @@ jobs:
     - name: Build Debug APK
       run: ./gradlew assembleDebug --no-daemon --stacktrace
     
+    - name: Build Debug AAB
+      run: ./gradlew bundleDebug --no-daemon --stacktrace
+    
     # Release build may fail without signing configuration - this is expected
     - name: Build Release APK
       run: ./gradlew assembleRelease --no-daemon --stacktrace
       continue-on-error: true
-      id: release-build
+      id: release-apk-build
+    
+    - name: Build Release AAB
+      run: ./gradlew bundleRelease --no-daemon --stacktrace
+      continue-on-error: true
+      id: release-aab-build
     
     - name: Check Release Build Status
-      if: failure() && steps.release-build.outcome == 'failure'
+      if: failure() && (steps.release-apk-build.outcome == 'failure' || steps.release-aab-build.outcome == 'failure')
       run: |
         echo "⚠️ Release build failed - this is expected if signing configuration is not set up"
         echo "See BUILDING.md for information on configuring release signing"
     
-    - name: Rename APK files
+    - name: Prepare distribution files
       run: |
         mkdir -p dist
+        
+        # Copy APK files
         if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
           cp app/build/outputs/apk/debug/app-debug.apk dist/ABB-${{ steps.version.outputs.version }}-debug.apk
+          echo "✓ Debug APK copied"
         fi
         if [ -f app/build/outputs/apk/release/app-release-unsigned.apk ]; then
           cp app/build/outputs/apk/release/app-release-unsigned.apk dist/ABB-${{ steps.version.outputs.version }}-release-unsigned.apk
+          echo "✓ Release APK (unsigned) copied"
         fi
         if [ -f app/build/outputs/apk/release/app-release.apk ]; then
           cp app/build/outputs/apk/release/app-release.apk dist/ABB-${{ steps.version.outputs.version }}-release.apk
+          echo "✓ Release APK (signed) copied"
         fi
+        
+        # Copy AAB files
+        if [ -f app/build/outputs/bundle/debug/app-debug.aab ]; then
+          cp app/build/outputs/bundle/debug/app-debug.aab dist/ABB-${{ steps.version.outputs.version }}-debug.aab
+          echo "✓ Debug AAB copied"
+        fi
+        if [ -f app/build/outputs/bundle/release/app-release.aab ]; then
+          cp app/build/outputs/bundle/release/app-release.aab dist/ABB-${{ steps.version.outputs.version }}-release.aab
+          echo "✓ Release AAB copied"
+        fi
+        
+        echo ""
+        echo "=== Distribution files ==="
         ls -lh dist/
     
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug-${{ steps.version.outputs.version }}
+        name: app-debug-apk-${{ steps.version.outputs.version }}
         path: dist/*-debug.apk
+        if-no-files-found: error
+    
+    - name: Upload Debug AAB
+      uses: actions/upload-artifact@v4
+      with:
+        name: app-debug-aab-${{ steps.version.outputs.version }}
+        path: dist/*-debug.aab
         if-no-files-found: error
     
     # Upload release APK only if it was built successfully
     - name: Upload Release APK
       uses: actions/upload-artifact@v4
-      if: steps.release-build.outcome == 'success'
+      if: steps.release-apk-build.outcome == 'success'
       with:
-        name: app-release-${{ steps.version.outputs.version }}
+        name: app-release-apk-${{ steps.version.outputs.version }}
         path: dist/*-release*.apk
         if-no-files-found: warn
     
-    - name: List APK outputs
+    # Upload release AAB only if it was built successfully
+    - name: Upload Release AAB
+      uses: actions/upload-artifact@v4
+      if: steps.release-aab-build.outcome == 'success'
+      with:
+        name: app-release-aab-${{ steps.version.outputs.version }}
+        path: dist/*-release*.aab
+        if-no-files-found: warn
+    
+    - name: List build outputs
       if: always()
       run: |
         echo "=== Debug APK ==="
@@ -99,5 +141,11 @@ jobs:
         echo "=== Release APK ==="
         ls -lh app/build/outputs/apk/release/ || echo "No release APK found"
         echo ""
-        echo "=== Distribution APKs ==="
+        echo "=== Debug AAB ==="
+        ls -lh app/build/outputs/bundle/debug/ || echo "No debug AAB found"
+        echo ""
+        echo "=== Release AAB ==="
+        ls -lh app/build/outputs/bundle/release/ || echo "No release AAB found"
+        echo ""
+        echo "=== Distribution files ==="
         ls -lh dist/ || echo "No dist folder found"
