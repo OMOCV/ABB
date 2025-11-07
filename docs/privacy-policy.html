@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>隐私政策 | Privacy Policy</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, "Noto Sans", "Segoe UI Symbol", "Apple Color Emoji", "Segoe UI Emoji", sans-serif; margin: 2rem auto; max-width: 860px; padding: 0 1rem; line-height: 1.6; color: #1f2328; }
+    h1, h2, h3 { line-height: 1.3; }
+    .lang-toggle { margin-bottom: 1rem; }
+    .note { color: #6e7781; font-size: 0.9rem; }
+    .card { border: 1px solid #d0d7de; border-radius: 8px; padding: 1rem; margin: 1rem 0; }
+    a { color: #0969da; }
+    .muted { color: #6e7781; }
+    .updated { font-size: 0.95rem; color: #57606a; }
+    .footer { margin-top: 2rem; font-size: 0.9rem; color: #6e7781; }
+    .divider { border-top: 1px solid #d0d7de; margin: 2rem 0; }
+    .btn { display: inline-block; border: 1px solid #d0d7de; border-radius: 6px; padding: .4rem .7rem; margin-right: .5rem; cursor: pointer; user-select: none; }
+    .btn.active { background: #f6f8fa; }
+  </style>
+  <script>
+    function setLang(lang) {
+      document.getElementById('zh').style.display = lang === 'zh' ? 'block' : 'none';
+      document.getElementById('en').style.display = lang === 'en' ? 'block' : 'none';
+      document.getElementById('btn-zh').classList.toggle('active', lang === 'zh');
+      document.getElementById('btn-en').classList.toggle('active', lang === 'en');
+      if (history.replaceState) history.replaceState(null, '', lang === 'zh' ? '#zh' : '#en');
+    }
+    window.addEventListener('DOMContentLoaded', function () {
+      const hash = (location.hash || '').toLowerCase();
+      if (hash.includes('en')) setLang('en'); else setLang('zh');
+    });
+  </script>
+</head>
+<body>
+  <header>
+    <h1>隐私政策 | Privacy Policy</h1>
+    <div class="updated">最后更新：2025-11-07 · Last updated: 2025-11-07</div>
+    <div class="lang-toggle" role="group" aria-label="Language toggle">
+      <span id="btn-zh" class="btn" onclick="setLang('zh')">中文</span>
+      <span id="btn-en" class="btn" onclick="setLang('en')">English</span>
+    </div>
+    <div class="note">请将方括号 [] 内的占位信息替换为你的实际信息。Replace the bracketed placeholders with your actual details.</div>
+  </header>
+
+  <section id="zh">
+    <h2>简介</h2>
+    <p>欢迎使用「[应用名称]」（“本应用”）。本应用由「[开发者/公司名称]」（“我们”）提供和运营。我们重视您的隐私与数据安全，并依据适用法律保护您的个人信息。</p>
+
+    <h2>我们收集的信息</h2>
+    <div class="card">
+      <p>默认情况下，我们可能收集以下信息（如适用）：</p>
+      <ul>
+        <li>设备信息（如设备型号、操作系统版本、唯一设备标识符等）</li>
+        <li>应用日志与崩溃报告（用于改进稳定性与诊断问题）</li>
+        <li>使用数据（如功能使用频率、基本交互事件，用于产品分析）</li>
+      </ul>
+      <p class="muted">如您未使用相关功能或我们未集成相关分析/崩溃 SDK，上述数据不会被收集。请根据实际情况调整本段描述。</p>
+    </div>
+
+    <h2>用途与共享</h2>
+    <ul>
+      <li>用途：改进产品性能与稳定性、修复问题、统计与分析。</li>
+      <li>共享：除法律法规要求或必要的服务提供商外，我们不会出售您的个人数据。</li>
+    </ul>
+
+    <h2>第三方服务/SDK</h2>
+    <p>如使用第三方服务（例如崩溃分析或统计）：请在此列出并附其隐私政策链接（示例）：</p>
+    <ul>
+      <li>Firebase / Crashlytics（如适用）：https://policies.google.com/privacy</li>
+      <li>Google Analytics（如适用）：https://policies.google.com/privacy</li>
+      <li>[其他 SDK 名称与链接]</li>
+    </ul>
+
+    <h2>权限使用</h2>
+    <p>当功能需要时，我们可能请求权限（例如相机、存储、位置）。权限仅用于实现对应功能，未经您的允许不会启用。</p>
+
+    <h2>未成年人保护</h2>
+    <p>本应用并非专为儿童设计。如您为未成年人，请在监护人同意与指导下使用。</p>
+
+    <h2>数据保留与安全</h2>
+    <p>我们在实现本政策所述目的所需期限内保存数据，并采取合理的技术与管理措施保护数据安全。</p>
+
+    <h2>您的权利</h2>
+    <p>您可依据适用法律行使访问、更正、删除、撤回同意等权利。请通过下方联系方式与我们取得联系。</p>
+
+    <h2>国际合规</h2>
+    <p>如适用，我们将参考 GDPR/CCPA 等法规处理相关请求。请根据实际业务与用户分布调整本段。</p>
+
+    <h2>联系我们</h2>
+    <p>邮箱：[contact@example.com]</p>
+    <p>公司/地址（可选）：[公司名称与地址]</p>
+
+    <h2>本政策的变更</h2>
+    <p>我们可能不时更新本政策，更新后将在本页显示最新版本与更新日期。</p>
+  </section>
+
+  <section id="en" style="display:none">
+    <h2>Introduction</h2>
+    <p>Welcome to “[App Name]” (the “App”), provided and operated by “[Developer/Company Name]” (“we”, “us”). We value your privacy and protect your data in accordance with applicable laws.</p>
+
+    <h2>Information We Collect</h2>
+    <div class="card">
+      <p>By default, we may collect the following information (if applicable):</p>
+      <ul>
+        <li>Device information (e.g., device model, OS version, unique device identifiers)</li>
+        <li>App logs and crash reports (to improve stability and diagnose issues)</li>
+        <li>Usage analytics (e.g., feature usage frequency, basic interaction events)</li>
+      </ul>
+      <p class="muted">If you do not use related features or we do not integrate analytics/crash SDKs, the above data will not be collected. Adjust this section to match your actual setup.</p>
+    </div>
+
+    <h2>Use and Sharing</h2>
+    <ul>
+      <li>Use: product improvement, performance/stability enhancement, debugging, statistics and analytics.</li>
+      <li>Sharing: we do not sell your personal data. We may share data only with service providers or as required by law.</li>
+    </ul>
+
+    <h2>Third-party Services/SDKs</h2>
+    <p>If third-party services are used (e.g., crash/analytics), list them with links to their privacy policies (examples):</p>
+    <ul>
+      <li>Firebase / Crashlytics (if applicable): https://policies.google.com/privacy</li>
+      <li>Google Analytics (if applicable): https://policies.google.com/privacy</li>
+      <li>[Other SDK names and links]</li>
+    </ul>
+
+    <h2>Permissions</h2>
+    <p>We may request certain permissions (e.g., camera, storage, location) only when features require them, and they are not enabled without your consent.</p>
+
+    <h2>Children’s Privacy</h2>
+    <p>This App is not specifically directed to children. If you are a minor, please use the App with parental consent and guidance.</p>
+
+    <h2>Data Retention and Security</h2>
+    <p>We retain data for as long as necessary to fulfill the purposes described in this policy and apply reasonable technical and organizational safeguards.</p>
+
+    <h2>Your Rights</h2>
+    <p>Subject to applicable laws, you may request access, correction, deletion, or withdrawal of consent. Contact us using the information below.</p>
+
+    <h2>International Compliance</h2>
+    <p>Where applicable, we will consider GDPR/CCPA requirements. Tailor this section based on your actual users and operations.</p>
+
+    <h2>Contact Us</h2>
+    <p>Email: [contact@example.com]</p>
+    <p>Company/Address (optional): [Company name and address]</p>
+
+    <h2>Changes to This Policy</h2>
+    <p>We may update this policy from time to time. The latest version and updated date will be shown on this page.</p>
+  </section>
+
+  <div class="divider"></div>
+  <div class="footer">
+    <p class="muted">建议将本页链接加入应用内的“设置 / 关于 / 帮助”，或在 README 中添加入口。It’s recommended to link this page from your in-app Settings/About/Help or README.</p>
+  </div>
+</body>
+</html>
