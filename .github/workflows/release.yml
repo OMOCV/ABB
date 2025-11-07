@@ -93,13 +93,17 @@ jobs:
           echo "✓ Release AAB prepared"
         fi
         
-        # Generate checksums - only if APK/AAB files exist
+        # Generate checksums for all files
         cd release
-        if ls *.apk *.aab 1> /dev/null 2>&1; then
-          sha256sum *.apk *.aab 2>/dev/null > checksums-sha256.txt || sha256sum * > checksums-sha256.txt
+        if [ -n "$(ls -A 2>/dev/null)" ]; then
+          for file in *; do
+            if [ -f "$file" ]; then
+              sha256sum "$file" >> checksums-sha256.txt
+            fi
+          done
           echo "✓ Checksums generated"
         else
-          echo "⚠️ No APK/AAB files found, skipping checksum generation"
+          echo "⚠️ No files found, skipping checksum generation"
         fi
         cd ..
         
