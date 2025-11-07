@@ -294,6 +294,9 @@ ENDMODULE
 - 📝 [CHANGELOG.md](CHANGELOG.md) - 变更日志 / Changelog
 - 💡 [EXAMPLES.md](EXAMPLES.md) - 使用示例 / Usage examples
 - 🤝 [CONTRIBUTING.md](CONTRIBUTING.md) - 贡献指南 / Contributing guide
+- 🔐 Privacy / 隐私
+  - 隐私政策 (中文): https://omocv.github.io/Android/privacy-policy-zh.html
+  - Privacy Policy (English): https://omocv.github.io/Android/privacy-policy-en.html
 
 ## 许可证
 
