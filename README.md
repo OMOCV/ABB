@@ -288,6 +288,8 @@ ENDMODULE
 
 - 📖 [README.md](README.md) - 项目介绍 / Project introduction
 - 🔨 [BUILDING.md](BUILDING.md) - 构建指南 / Build guide
+- 🔐 [SIGNING_SETUP.md](docs/SIGNING_SETUP.md) - 签名配置完整指南 / Complete signing setup guide
+- ⚡ [SIGNING_QUICK_REF.md](docs/SIGNING_QUICK_REF.md) - 签名配置快速参考 / Signing quick reference
 - 🚀 [QUICK_RELEASE.md](QUICK_RELEASE.md) - 快速发布指南 / Quick release guide
 - 📋 [RELEASE.md](RELEASE.md) - 完整发布指南 / Complete release guide
 - 📊 [BUILD_PUBLISH_SUMMARY.md](BUILD_PUBLISH_SUMMARY.md) - 构建发布总结 / Build & publish summary
