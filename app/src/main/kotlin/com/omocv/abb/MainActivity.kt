@@ -6,13 +6,10 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Environment
-import android.provider.Settings
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.appbar.MaterialToolbar
@@ -107,21 +104,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionAndOpenFile() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            // Android 11 and above - need MANAGE_EXTERNAL_STORAGE
-            if (Environment.isExternalStorageManager()) {
-                openFilePicker()
-            } else {
-                try {
-                    val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION)
-                    intent.data = Uri.parse("package:$packageName")
-                    startActivity(intent)
-                } catch (e: Exception) {
-                    openFilePicker() // Fallback to scoped storage
-                }
-            }
-        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            // Android 6.0 to 10
+        // For Android 6.0 to 12, check READ_EXTERNAL_STORAGE permission
+        // For Android 13+, we rely on SAF which doesn't require runtime permissions
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
             if (ContextCompat.checkSelfPermission(
                     this,
                     Manifest.permission.READ_EXTERNAL_STORAGE
@@ -134,6 +119,7 @@ class MainActivity : AppCompatActivity() {
                 )
             }
         } else {
+            // Android 5.x or Android 13+ - use SAF directly
             openFilePicker()
         }
     }
