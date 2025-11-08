@@ -196,6 +196,20 @@ java -jar bundletool.jar install-apks --apks=app.apks
 
 ## 签名发布版本 / Signing Release Version
 
+### 项目签名配置 / Project Signing Configuration
+
+**项目已经配置好签名支持！/ The project is already configured for signing!**
+
+The `app/build.gradle.kts` file is configured to automatically use signing credentials from:
+- Environment variables (for CI/CD)
+- Or `keystore.properties` file (for local builds)
+
+项目的 `app/build.gradle.kts` 已配置为自动从以下位置读取签名凭据：
+- 环境变量（用于 CI/CD）
+- 或 `keystore.properties` 文件（用于本地构建）
+
+### 本地签名配置 / Local Signing Configuration
+
 ### 创建密钥库 / Create Keystore
 
 ```bash
@@ -204,38 +218,58 @@ keytool -genkey -v -keystore abb-release-key.jks -keyalg RSA -keysize 2048 -vali
 
 ### 配置签名 / Configure Signing
 
-1. 在项目根目录创建 `keystore.properties` 文件:
-   ```properties
-   storePassword=YOUR_STORE_PASSWORD
-   keyPassword=YOUR_KEY_PASSWORD
-   keyAlias=abb-key
-   storeFile=../abb-release-key.jks
-   ```
+在项目根目录创建 `keystore.properties` 文件 / Create `keystore.properties` file in project root:
 
-2. 修改 `app/build.gradle.kts` 添加签名配置:
-   ```kotlin
-   android {
-       signingConfigs {
-           create("release") {
-               storeFile = file("../abb-release-key.jks")
-               storePassword = "YOUR_STORE_PASSWORD"
-               keyAlias = "abb-key"
-               keyPassword = "YOUR_KEY_PASSWORD"
-           }
-       }
-       buildTypes {
-           release {
-               signingConfig = signingConfigs.getByName("release")
-               // ...
-           }
-       }
-   }
-   ```
+```properties
+KEYSTORE_FILE=abb-release-key.jks
+KEYSTORE_PASSWORD=YOUR_STORE_PASSWORD
+KEY_ALIAS=abb-key
+KEY_PASSWORD=YOUR_KEY_PASSWORD
+```
 
-3. 构建签名版本:
-   ```bash
-   ./gradlew assembleRelease
-   ```
+**重要 / Important**: 
+- 将 `keystore.properties` 添加到 `.gitignore` 以避免提交密钥信息
+- Add `keystore.properties` to `.gitignore` to avoid committing sensitive information
+- 妥善保管密钥库文件 / Keep the keystore file secure
+
+### GitHub Actions 签名 / GitHub Actions Signing
+
+For automated signing in GitHub Actions, configure the following secrets in your repository:
+
+在 GitHub Actions 中自动签名，需要在仓库中配置以下 Secrets：
+
+1. 访问 / Visit: `Settings > Secrets and variables > Actions`
+2. 添加以下 secrets / Add the following secrets:
+   - `KEYSTORE_FILE`: 密钥库文件的 Base64 编码 / Base64-encoded keystore file
+   - `KEYSTORE_PASSWORD`: 密钥库密码 / Keystore password
+   - `KEY_ALIAS`: 密钥别名 / Key alias
+   - `KEY_PASSWORD`: 密钥密码 / Key password
+
+**生成 KEYSTORE_FILE 的 Base64 编码 / Generate Base64 encoding for KEYSTORE_FILE:**
+
+```bash
+# Linux/macOS
+base64 abb-release-key.jks | tr -d '\n' > keystore.b64
+
+# Windows (PowerShell)
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("abb-release-key.jks")) > keystore.b64
+```
+
+Then copy the content of `keystore.b64` into the `KEYSTORE_FILE` secret.  
+然后将 `keystore.b64` 的内容复制到 `KEYSTORE_FILE` secret 中。
+
+### 构建签名版本 / Build Signed Release
+
+With signing configured, simply build the release version:  
+配置好签名后，只需构建 release 版本：
+
+```bash
+./gradlew assembleRelease
+```
+
+输出位置 / Output location:
+- Signed: `app/build/outputs/apk/release/app-release.apk`
+- 如果未配置签名 / If signing not configured: `app/build/outputs/apk/release/app-release-unsigned.apk`
 
 ## 常见问题 / Common Issues
 

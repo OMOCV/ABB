@@ -192,24 +192,40 @@ base64 release-key.jks > keystore.b64
 
 #### 3. 更新 Gradle 配置
 
-在 `app/build.gradle.kts` 中添加签名配置：
+**Note: 项目已配置好签名支持，无需手动修改 Gradle 文件。**
+
+The project is already configured to use signing from environment variables.  
+项目已经配置为从环境变量读取签名配置。
+
+在 `app/build.gradle.kts` 中已包含签名配置：
 
 ```kotlin
 android {
     signingConfigs {
         create("release") {
-            // 在 GitHub Actions 中使用环境变量
-            storeFile = file(System.getenv("KEYSTORE_FILE") ?: "release-key.jks")
-            storePassword = System.getenv("KEYSTORE_PASSWORD")
-            keyAlias = System.getenv("KEY_ALIAS")
-            keyPassword = System.getenv("KEY_PASSWORD")
+            // Read signing configuration from environment variables
+            // These will be set by CI/CD or from keystore.properties file
+            val keystorePath = System.getenv("KEYSTORE_FILE") ?: project.findProperty("KEYSTORE_FILE") as String?
+            val keystorePassword = System.getenv("KEYSTORE_PASSWORD") ?: project.findProperty("KEYSTORE_PASSWORD") as String?
+            val keyAlias = System.getenv("KEY_ALIAS") ?: project.findProperty("KEY_ALIAS") as String?
+            val keyPassword = System.getenv("KEY_PASSWORD") ?: project.findProperty("KEY_PASSWORD") as String?
+
+            if (keystorePath != null && keystorePassword != null && keyAlias != null && keyPassword != null) {
+                storeFile = file(keystorePath)
+                storePassword = keystorePassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
+            }
         }
     }
     
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
-            isMinifyEnabled = true
+            // Only use signing config if it's properly configured
+            if (signingConfigs.getByName("release").storeFile != null) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -221,21 +237,40 @@ android {
 
 #### 4. 更新工作流
 
-在 `.github/workflows/release.yml` 中添加签名步骤：
+**Note: 工作流已配置好签名支持，无需手动修改。**
+
+The workflows are already configured to use signing secrets.  
+工作流已经配置为使用签名密钥。
+
+在 `.github/workflows/build-apk.yml` 和 `.github/workflows/release.yml` 中已包含签名步骤：
 
 ```yaml
-- name: Decode keystore
+# Decode and setup signing keystore if secrets are available
+- name: Decode Keystore
+  if: ${{ secrets.KEYSTORE_FILE != '' }}
   run: |
-    echo "${{ secrets.KEYSTORE_FILE }}" | base64 -d > release-key.jks
+    echo "${{ secrets.KEYSTORE_FILE }}" | base64 --decode > $HOME/keystore.jks
+    echo "KEYSTORE_FILE=$HOME/keystore.jks" >> $GITHUB_ENV
+    echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+    echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+    echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+    echo "✓ Keystore decoded and configured"
 
-- name: Build Release APK (signed)
-  run: ./gradlew assembleRelease
-  env:
-    KEYSTORE_FILE: release-key.jks
-    KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-    KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-    KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+- name: Build Release APK
+  run: ./gradlew assembleRelease --no-daemon --stacktrace
+  continue-on-error: ${{ secrets.KEYSTORE_FILE == '' }}
+  id: release-apk-build
 ```
+
+当配置了 GitHub Secrets 后，工作流会自动：
+1. 解码 keystore 文件
+2. 设置环境变量
+3. 构建签名的 Release APK 和 AAB
+
+When GitHub Secrets are configured, the workflow will automatically:
+1. Decode the keystore file
+2. Set environment variables
+3. Build signed Release APK and AAB
 
 ## 发布后任务 / Post-Release Tasks
 

@@ -29,6 +29,17 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     
+    # Decode and setup signing keystore if secrets are available
+    - name: Decode Keystore
+      if: ${{ secrets.KEYSTORE_FILE != '' }}
+      run: |
+        echo "${{ secrets.KEYSTORE_FILE }}" | base64 --decode > $HOME/keystore.jks
+        echo "KEYSTORE_FILE=$HOME/keystore.jks" >> $GITHUB_ENV
+        echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
+        echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
+        echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
+        echo "✓ Keystore decoded and configured"
+    
     - name: Get version from tag
       id: version
       run: |
@@ -51,12 +62,12 @@ jobs:
     
     - name: Build Release APK (unsigned)
       run: ./gradlew assembleRelease --no-daemon --stacktrace
-      continue-on-error: true
+      continue-on-error: ${{ secrets.KEYSTORE_FILE == '' }}
       id: release-apk-build
     
     - name: Build Release AAB
       run: ./gradlew bundleRelease --no-daemon --stacktrace
-      continue-on-error: true
+      continue-on-error: ${{ secrets.KEYSTORE_FILE == '' }}
       id: release-aab-build
     
     - name: Prepare release artifacts
