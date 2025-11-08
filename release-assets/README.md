@@ -53,7 +53,8 @@ release-assets/
 使用方法：
 1) 将素材文件放入上述对应子目录；
 2) 在项目根目录执行：
-   - 安装依赖：pip install pillow
+   - 安装依赖：python3 -m pip install pillow
+   - （可选）生成占位图片用于测试：python3 scripts/generate_placeholders.py
    - 运行校验：python3 scripts/validate_assets.py
 3) 通过校验后再提交应用商店。
 
