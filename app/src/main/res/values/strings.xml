@@ -9,4 +9,41 @@
     <string name="routine_label">例行程序</string>
     <string name="file_content">文件内容</string>
     <string name="supported_formats">支持的格式: .mod, .prg, .sys</string>
+    
+    <!-- New features strings -->
+    <string name="search">搜索</string>
+    <string name="search_code">搜索代码</string>
+    <string name="search_hint">输入搜索内容</string>
+    <string name="export">导出</string>
+    <string name="export_code">导出代码</string>
+    <string name="bookmarks">书签</string>
+    <string name="add_bookmark">添加书签</string>
+    <string name="bookmark_added">书签已添加</string>
+    <string name="no_bookmarks">没有书签</string>
+    <string name="view_bookmarks">查看书签</string>
+    <string name="line_number">行 %s</string>
+    <string name="line_number_hint">输入行号</string>
+    <string name="jumped_to_line">跳转到行 %d</string>
+    <string name="format_code">格式化代码</string>
+    <string name="code_formatted">代码已格式化</string>
+    <string name="check_syntax">检查语法</string>
+    <string name="syntax_errors">语法错误</string>
+    <string name="no_syntax_errors">未发现语法错误</string>
+    <string name="module_mismatch">模块不匹配: %d 个 MODULE, %d 个 ENDMODULE</string>
+    <string name="proc_mismatch">程序不匹配: %d 个 PROC, %d 个 ENDPROC</string>
+    <string name="toggle_theme">切换主题</string>
+    <string name="recent_files">最近文件</string>
+    <string name="open_folder">打开文件夹</string>
+    <string name="no_matches_found">未找到匹配项</string>
+    <string name="found_matches">找到 %d 个匹配项</string>
+    <string name="view_code">查看代码</string>
+    <string name="cancel">取消</string>
+    <string name="ok">确定</string>
+    <string name="add">添加</string>
+    <string name="close">关闭</string>
+    <string name="file_browser">文件浏览器</string>
+    <string name="project_files">项目文件</string>
+    <string name="select_folder">选择文件夹</string>
+    <string name="no_recent_files">没有最近文件</string>
+    <string name="feature_coming_soon">功能即将推出</string>
 </resources>

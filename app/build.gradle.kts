@@ -11,8 +11,8 @@ android {
         applicationId = "com.omocv.abb"
         minSdk = 24
         targetSdk = 35
-        versionCode = 3
-        versionName = "2.0"
+        versionCode = 4
+        versionName = "2.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

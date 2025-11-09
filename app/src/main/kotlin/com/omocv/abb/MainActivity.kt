@@ -1,11 +1,14 @@
 package com.omocv.abb
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,11 +18,18 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import androidx.recyclerview.widget.RecyclerView
 import android.widget.TextView
 import java.io.File
 
 class MainActivity : AppCompatActivity() {
+    
+    companion object {
+        private const val PREFS_NAME = "ABBPrefs"
+        private const val KEY_RECENT_FILES = "recent_files"
+        private const val MAX_RECENT_FILES = 10
+    }
 
     private lateinit var btnSelectFile: MaterialButton
     private lateinit var tvFileName: TextView
@@ -64,6 +74,29 @@ class MainActivity : AppCompatActivity() {
         
         // Handle intent if opened from file manager
         handleIntent(intent)
+    }
+    
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.menu_main, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_open_file -> {
+                checkPermissionAndOpenFile()
+                true
+            }
+            R.id.action_recent_files -> {
+                showRecentFiles()
+                true
+            }
+            R.id.action_open_folder -> {
+                openFolderBrowser()
+                true
+            }
+            else -> super.onOptionsItemSelected(item)
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -134,6 +167,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun handleSelectedFile(uri: Uri) {
         try {
+            currentFileUri = uri
             // Read file from URI
             val inputStream = contentResolver.openInputStream(uri)
             val content = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
@@ -215,7 +249,69 @@ class MainActivity : AppCompatActivity() {
         cardContent.visibility = View.VISIBLE
         val highlightedContent = syntaxHighlighter.highlight(programFile.content)
         tvContent.text = highlightedContent
+        
+        // Add button to view in full screen
+        tvContent.setOnClickListener {
+            openCodeViewer(programFile.fileName, programFile.content)
+        }
+        
+        // Add file to recent files
+        addToRecentFiles(programFile.fileName, currentFileUri?.toString() ?: "")
     }
+
+    private fun openCodeViewer(fileName: String, content: String) {
+        val intent = CodeViewerActivity.newIntent(this, fileName, content)
+        startActivity(intent)
+    }
+
+    private fun addToRecentFiles(fileName: String, fileUri: String) {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val recentFiles = prefs.getStringSet(KEY_RECENT_FILES, mutableSetOf())?.toMutableSet() ?: mutableSetOf()
+        
+        // Format: fileName|||fileUri
+        val entry = "$fileName|||$fileUri"
+        recentFiles.add(entry)
+        
+        // Keep only the last MAX_RECENT_FILES
+        if (recentFiles.size > MAX_RECENT_FILES) {
+            val list = recentFiles.toList()
+            recentFiles.clear()
+            recentFiles.addAll(list.takeLast(MAX_RECENT_FILES))
+        }
+        
+        prefs.edit().putStringSet(KEY_RECENT_FILES, recentFiles).apply()
+    }
+
+    private fun showRecentFiles() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val recentFiles = prefs.getStringSet(KEY_RECENT_FILES, mutableSetOf())?.toList() ?: emptyList()
+        
+        if (recentFiles.isEmpty()) {
+            Toast.makeText(this, getString(R.string.no_recent_files), Toast.LENGTH_SHORT).show()
+            return
+        }
+        
+        val fileNames = recentFiles.map { it.split("|||")[0] }.toTypedArray()
+        
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.recent_files))
+            .setItems(fileNames) { _, which ->
+                val entry = recentFiles[which]
+                val parts = entry.split("|||")
+                if (parts.size >= 2) {
+                    val uri = Uri.parse(parts[1])
+                    handleSelectedFile(uri)
+                }
+            }
+            .setNegativeButton(getString(R.string.close), null)
+            .show()
+    }
+
+    private fun openFolderBrowser() {
+        Toast.makeText(this, getString(R.string.feature_coming_soon), Toast.LENGTH_SHORT).show()
+    }
+    
+    private var currentFileUri: Uri? = null
 
     private fun displayRoutineContent(fullContent: String, routine: ABBRoutine) {
         val lines = fullContent.lines()
