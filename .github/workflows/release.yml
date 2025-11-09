@@ -40,6 +40,13 @@ jobs:
         echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
         echo "✓ Keystore decoded and configured"
     
+    # Verify signing configuration before building
+    - name: Verify Signing Configuration
+      run: |
+        chmod +x verify-signing-config.sh
+        ./verify-signing-config.sh
+      continue-on-error: false
+    
     - name: Get version from tag
       id: version
       run: |
