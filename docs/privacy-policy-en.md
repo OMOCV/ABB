@@ -1,6 +1,7 @@
 ---
 title: Privacy Policy
 last_updated: 2025-11-09
+layout: default
 ---
 
 # Privacy Policy
