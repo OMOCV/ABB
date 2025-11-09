@@ -58,7 +58,7 @@ last_updated: 2025-11-07
 
 ## 联系我们
 邮箱：omowco@gmail.com  
-开发者：Jack  
+开发者：Heartbeat 
 公司/注册地址：无（个人开发者）
 
 ## 本政策的变更
