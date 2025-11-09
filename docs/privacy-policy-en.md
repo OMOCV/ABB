@@ -7,7 +7,7 @@ last_updated: 2025-11-09
 
 Last updated: 2025-11-09
 
-Welcome to "ABB Robot Program Reader" (the "App"), operated by the individual developer Jack. We currently do not collect personal or device data. This policy describes our baseline data practices and how future changes will be communicated. Because the App is available globally (including the EU), we refer to GDPR principles even though no personal data is processed at present.
+Welcome to "ABB Robot Program Reader" (the "App"), operated by the individual developer Heartbeat. We currently do not collect personal or device data. This policy describes our baseline data practices and how future changes will be communicated. Because the App is available globally (including the EU), we refer to GDPR principles even though no personal data is processed at present.
 
 ## Information We Collect
 At this time, the App does NOT collect:
