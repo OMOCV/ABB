@@ -240,12 +240,12 @@ For automated signing in GitHub Actions, configure the following secrets in your
 
 1. 访问 / Visit: `Settings > Secrets and variables > Actions`
 2. 添加以下 secrets / Add the following secrets:
-   - `KEYSTORE_FILE`: 密钥库文件的 Base64 编码 / Base64-encoded keystore file
+   - `KEYSTORE_BASE64`: 密钥库文件的 Base64 编码 / Base64-encoded keystore file
    - `KEYSTORE_PASSWORD`: 密钥库密码 / Keystore password
    - `KEY_ALIAS`: 密钥别名 / Key alias
    - `KEY_PASSWORD`: 密钥密码 / Key password
 
-**生成 KEYSTORE_FILE 的 Base64 编码 / Generate Base64 encoding for KEYSTORE_FILE:**
+**生成 KEYSTORE_BASE64 的 Base64 编码 / Generate Base64 encoding for KEYSTORE_BASE64:**
 
 ```bash
 # Linux/macOS
@@ -255,8 +255,8 @@ base64 abb-release-key.jks | tr -d '\n' > keystore.b64
 [Convert]::ToBase64String([IO.File]::ReadAllBytes("abb-release-key.jks")) > keystore.b64
 ```
 
-Then copy the content of `keystore.b64` into the `KEYSTORE_FILE` secret.  
-然后将 `keystore.b64` 的内容复制到 `KEYSTORE_FILE` secret 中。
+Then copy the content of `keystore.b64` into the `KEYSTORE_BASE64` secret.  
+然后将 `keystore.b64` 的内容复制到 `KEYSTORE_BASE64` secret 中。
 
 ### 构建签名版本 / Build Signed Release
 

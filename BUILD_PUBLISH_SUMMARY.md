@@ -201,7 +201,7 @@ git push origin v1.1.0
 
 建议配置的 Secrets（用于签名 Release APK）:
 ```
-KEYSTORE_FILE       # Base64 编码的密钥库文件
+KEYSTORE_BASE64     # Base64 编码的密钥库文件
 KEYSTORE_PASSWORD   # 密钥库密码
 KEY_ALIAS          # 密钥别名
 KEY_PASSWORD       # 密钥密码
