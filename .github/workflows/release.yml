@@ -31,7 +31,7 @@ jobs:
     
     # Decode and setup signing keystore if secrets are available
     - name: Decode Keystore
-      if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+      continue-on-error: true
       run: |
         echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $HOME/keystore.jks
         echo "KEYSTORE_FILE=$HOME/keystore.jks" >> $GITHUB_ENV
@@ -69,12 +69,12 @@ jobs:
     
     - name: Build Release APK (unsigned)
       run: ./gradlew assembleRelease --no-daemon --stacktrace
-      continue-on-error: ${{ secrets.KEYSTORE_BASE64 == '' }}
+      continue-on-error: true
       id: release-apk-build
     
     - name: Build Release AAB
       run: ./gradlew bundleRelease --no-daemon --stacktrace
-      continue-on-error: ${{ secrets.KEYSTORE_BASE64 == '' }}
+      continue-on-error: true
       id: release-aab-build
     
     - name: Prepare release artifacts
