@@ -43,7 +43,7 @@ signingConfigs {
 - `.github/workflows/release.yml`
 
 **变更 / Changes:**
-- 添加了 "Decode Keystore" 步骤，当 `KEYSTORE_FILE` secret 存在时执行
+- 添加了 "Decode Keystore" 步骤，当 `KEYSTORE_BASE64` secret 存在时执行
 - Base64 解码密钥库文件到临时位置
 - 设置环境变量供 Gradle 使用
 - 修改 `continue-on-error` 逻辑：只有在缺少签名配置时才允许失败
@@ -52,10 +52,10 @@ signingConfigs {
 ```yaml
 # 1. 检查是否配置了签名 secrets
 - name: Decode Keystore
-  if: ${{ secrets.KEYSTORE_FILE != '' }}
+  if: ${{ secrets.KEYSTORE_BASE64 != '' }}
   run: |
     # 2. 解码 keystore 文件
-    echo "${{ secrets.KEYSTORE_FILE }}" | base64 --decode > $HOME/keystore.jks
+    echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $HOME/keystore.jks
     # 3. 设置环境变量
     echo "KEYSTORE_FILE=$HOME/keystore.jks" >> $GITHUB_ENV
     # ...
@@ -63,7 +63,7 @@ signingConfigs {
 # 4. 构建签名版本（如果配置了签名）
 - name: Build Release APK
   run: ./gradlew assembleRelease --no-daemon --stacktrace
-  continue-on-error: ${{ secrets.KEYSTORE_FILE == '' }}
+  continue-on-error: ${{ secrets.KEYSTORE_BASE64 == '' }}
 ```
 
 ### 3. 文档更新 / Documentation Updates
@@ -145,7 +145,7 @@ signingConfigs {
    ```
 
 2. 在 GitHub 仓库添加 Secrets：
-   - `KEYSTORE_FILE` - keystore.b64 的内容
+   - `KEYSTORE_BASE64` - keystore.b64 的内容
    - `KEYSTORE_PASSWORD` - 密钥库密码
    - `KEY_ALIAS` - abb-key
    - `KEY_PASSWORD` - 密钥密码
@@ -181,7 +181,7 @@ signingConfigs {
 
 **智能失败处理 / Smart Failure Handling:**
 ```yaml
-continue-on-error: ${{ secrets.KEYSTORE_FILE == '' }}
+continue-on-error: ${{ secrets.KEYSTORE_BASE64 == '' }}
 ```
 
 **效果 / Effect:**

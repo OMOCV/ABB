@@ -27,7 +27,7 @@ base64 abb-release-key.jks | tr -d '\n' > keystore.b64
 ```
 
 在 GitHub 仓库添加 4 个 Secrets:
-- `KEYSTORE_FILE` → keystore.b64 的内容
+- `KEYSTORE_BASE64` → keystore.b64 的内容
 - `KEYSTORE_PASSWORD` → 密钥库密码
 - `KEY_ALIAS` → `abb-key`
 - `KEY_PASSWORD` → 密钥密码

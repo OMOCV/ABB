@@ -192,7 +192,7 @@ Or open the file in a text editor and copy all content.
 
    | Secret Name | Value | Description |
    |-------------|-------|-------------|
-   | `KEYSTORE_FILE` | [keystore.b64 的内容] | Base64 编码的密钥库文件 / Base64-encoded keystore file |
+   | `KEYSTORE_BASE64` | [keystore.b64 的内容] | Base64 编码的密钥库文件 / Base64-encoded keystore file |
    | `KEYSTORE_PASSWORD` | [您的密钥库密码] | 密钥库密码 / Keystore password |
    | `KEY_ALIAS` | `abb-key` | 密钥别名 / Key alias |
    | `KEY_PASSWORD` | [您的密钥密码] | 密钥密码 / Key password |
@@ -203,7 +203,7 @@ Or open the file in a text editor and copy all content.
    
    Make sure all 4 secrets are added:
    
-   - ✅ KEYSTORE_FILE
+   - ✅ KEYSTORE_BASE64
    - ✅ KEYSTORE_PASSWORD
    - ✅ KEY_ALIAS
    - ✅ KEY_PASSWORD
@@ -287,13 +287,13 @@ jarsigner -verify -verbose -certs app-release.apk
 ### 问题 1: 构建失败 "Keystore file not found"
 
 **原因 / Cause:**
-- `KEYSTORE_FILE` secret 未正确配置
+- `KEYSTORE_BASE64` secret 未正确配置
 - Base64 编码不正确
 
 **解决方案 / Solution:**
 1. 重新生成 Base64 编码，确保没有换行符
 2. 确认 secret 名称拼写正确（区分大小写）
-3. 重新添加 `KEYSTORE_FILE` secret
+3. 重新添加 `KEYSTORE_BASE64` secret
 
 ### 问题 2: 构建失败 "Incorrect password"
 

@@ -175,12 +175,12 @@ keytool -genkey -v -keystore release-key.jks \
 
 1. 访问 `Settings > Secrets and variables > Actions`
 2. 添加以下 secrets：
-   - `KEYSTORE_FILE`: 密钥库文件的 Base64 编码
+   - `KEYSTORE_BASE64`: 密钥库文件的 Base64 编码
    - `KEYSTORE_PASSWORD`: 密钥库密码
    - `KEY_ALIAS`: 密钥别名
    - `KEY_PASSWORD`: 密钥密码
 
-**生成 KEYSTORE_FILE 的 Base64 编码：**
+**生成 KEYSTORE_BASE64 的 Base64 编码：**
 
 ```bash
 # Linux/macOS
@@ -247,9 +247,9 @@ The workflows are already configured to use signing secrets.
 ```yaml
 # Decode and setup signing keystore if secrets are available
 - name: Decode Keystore
-  if: ${{ secrets.KEYSTORE_FILE != '' }}
+  if: ${{ secrets.KEYSTORE_BASE64 != '' }}
   run: |
-    echo "${{ secrets.KEYSTORE_FILE }}" | base64 --decode > $HOME/keystore.jks
+    echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > $HOME/keystore.jks
     echo "KEYSTORE_FILE=$HOME/keystore.jks" >> $GITHUB_ENV
     echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
     echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
@@ -258,7 +258,7 @@ The workflows are already configured to use signing secrets.
 
 - name: Build Release APK
   run: ./gradlew assembleRelease --no-daemon --stacktrace
-  continue-on-error: ${{ secrets.KEYSTORE_FILE == '' }}
+  continue-on-error: ${{ secrets.KEYSTORE_BASE64 == '' }}
   id: release-apk-build
 ```
 

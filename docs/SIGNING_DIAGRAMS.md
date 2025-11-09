@@ -71,7 +71,7 @@
     │ abb-release-key  │                 │                       │
     │     .jks         │   Base64        │   GitHub Secrets:     │
     │                  │────编码──────────▶│                       │
-    │  (Binary File)   │   Encode        │   KEYSTORE_FILE       │
+    │  (Binary File)   │   Encode        │   KEYSTORE_BASE64     │
     │                  │                 │   KEYSTORE_PASSWORD   │
     └──────────────────┘                 │   KEY_ALIAS           │
                                          │   KEY_PASSWORD        │
@@ -107,7 +107,7 @@
                               ┌─────────────────────▼─────────────────┐
                               │  Decode Keystore (if configured)      │
                               │                                        │
-                              │  IF secrets.KEYSTORE_FILE != '':      │
+                              │  IF secrets.KEYSTORE_BASE64 != '':    │
                               │    1. Base64 decode keystore          │
                               │    2. Save to $HOME/keystore.jks      │
                               │    3. Export environment variables:   │
@@ -128,7 +128,7 @@
                               │  ./gradlew bundleRelease               │
                               │                                        │
                               │  continue-on-error:                    │
-                              │    ${{ secrets.KEYSTORE_FILE == '' }}  │
+                              │    ${{ secrets.KEYSTORE_BASE64 == '' }}│
                               └─────────────────────┬─────────────────┘
                                                     │
                                     ┌───────────────┴──────────────┐
@@ -312,7 +312,7 @@ Android/
         .md (Implementation)      Technical details
 
 GitHub Repository Secrets:
-├── KEYSTORE_FILE ──────────────▶ Base64 编码的密钥库
+├── KEYSTORE_BASE64 ─────────────▶ Base64 编码的密钥库
 │   (Base64 keystore)             Base64 keystore
 ├── KEYSTORE_PASSWORD ──────────▶ 密钥库密码
 │   (Keystore password)           Keystore password
