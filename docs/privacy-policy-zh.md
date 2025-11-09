@@ -1,6 +1,7 @@
 ---
 title: 隐私政策
 last_updated: 2025-11-09
+layout: default
 ---
 
 # 隐私政策
