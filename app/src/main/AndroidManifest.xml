@@ -37,6 +37,12 @@
                 <data android:pathPattern=".*\\.sys" />
             </intent-filter>
         </activity>
+        
+        <activity
+            android:name=".CodeViewerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ABB"
+            android:parentActivityName=".MainActivity" />
     </application>
 
 </manifest>

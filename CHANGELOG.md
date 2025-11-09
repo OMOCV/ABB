@@ -7,6 +7,56 @@ All notable changes to the ABB Robot Program Reader project will be documented i
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2025-11-09
+
+### Added / 新增
+- ✅ 全屏代码查看器 (Full-screen code viewer)
+  - 文件内容全屏显示，不在特定框架内
+  - 显示行号
+  - 支持水平和垂直滚动
+- ✅ 代码搜索功能 (Code search functionality)
+  - 搜索对话框
+  - 高亮显示搜索结果
+  - 显示匹配数量
+- ✅ 代码导出功能 (Code export functionality)
+  - 通过分享功能导出代码
+  - 支持导出到其他应用
+- ✅ 深色主题 (Dark theme)
+  - 支持系统主题切换
+  - 手动切换深色/浅色模式
+  - 主题偏好持久化
+- ✅ 最近打开文件列表 (Recent files list)
+  - 保存最近打开的文件
+  - 快速访问最近文件
+  - 最多保存10个最近文件
+- ✅ 代码书签功能 (Code bookmarks)
+  - 添加书签到特定行
+  - 查看和跳转到书签
+  - 书签持久化存储
+- ✅ 语法错误检测 (Syntax error detection)
+  - 检测MODULE/ENDMODULE匹配
+  - 检测PROC/ENDPROC匹配
+  - 显示语法错误列表
+- ✅ 代码格式化功能 (Code formatting)
+  - 自动缩进
+  - 格式化代码结构
+  - 提高代码可读性
+- ✅ 国际化支持 (Internationalization)
+  - 英语界面支持
+  - 中文界面支持
+  - 根据系统语言自动切换
+
+### Changed / 更改
+- 优化代码显示方式，采用全屏布局
+- 改进用户界面，增加工具栏菜单
+- 增强语法高亮效果
+
+### Technical Details / 技术细节
+- 新增 `CodeViewerActivity` 用于全屏代码查看
+- 使用 SharedPreferences 存储用户偏好和书签
+- 实现菜单系统用于快速访问功能
+- 支持深色主题的资源文件
+
 ## [1.1.0] - 2025-11-06
 
 ### Added / 新增
@@ -132,16 +182,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] / 未发布
 
 ### Planned / 计划中
-- [ ] 添加代码搜索功能
 - [ ] 支持多文件项目浏览
-- [ ] 添加代码导出功能
-- [ ] 实现深色主题
-- [ ] 添加最近打开文件列表
-- [ ] 支持代码书签
-- [ ] 添加语法错误检测
 - [ ] 实现代码折叠功能
-- [ ] 支持代码格式化
-- [ ] 添加国际化支持 (英语界面)
 
 ### Future Enhancements / 未来增强
 - [ ] 代码编辑功能

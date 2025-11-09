@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ABB Robot Program Reader</string>
+    <string name="select_file">Select ABB Program File</string>
+    <string name="no_file_selected">No file selected</string>
+    <string name="file_error">File read error</string>
+    <string name="open_file">Open File</string>
+    <string name="module_label">Modules</string>
+    <string name="routine_label">Routines</string>
+    <string name="file_content">File Content</string>
+    <string name="supported_formats">Supported formats: .mod, .prg, .sys</string>
+    
+    <!-- New features strings -->
+    <string name="search">Search</string>
+    <string name="search_code">Search Code</string>
+    <string name="search_hint">Enter search text</string>
+    <string name="export">Export</string>
+    <string name="export_code">Export Code</string>
+    <string name="bookmarks">Bookmarks</string>
+    <string name="add_bookmark">Add Bookmark</string>
+    <string name="bookmark_added">Bookmark added</string>
+    <string name="no_bookmarks">No bookmarks</string>
+    <string name="view_bookmarks">View Bookmarks</string>
+    <string name="line_number">Line %s</string>
+    <string name="line_number_hint">Enter line number</string>
+    <string name="jumped_to_line">Jumped to line %d</string>
+    <string name="format_code">Format Code</string>
+    <string name="code_formatted">Code formatted</string>
+    <string name="check_syntax">Check Syntax</string>
+    <string name="syntax_errors">Syntax Errors</string>
+    <string name="no_syntax_errors">No syntax errors found</string>
+    <string name="module_mismatch">Module mismatch: %d MODULE, %d ENDMODULE</string>
+    <string name="proc_mismatch">Procedure mismatch: %d PROC, %d ENDPROC</string>
+    <string name="toggle_theme">Toggle Theme</string>
+    <string name="recent_files">Recent Files</string>
+    <string name="open_folder">Open Folder</string>
+    <string name="no_matches_found">No matches found</string>
+    <string name="found_matches">Found %d matches</string>
+    <string name="view_code">View Code</string>
+    <string name="cancel">Cancel</string>
+    <string name="ok">OK</string>
+    <string name="add">Add</string>
+    <string name="close">Close</string>
+    <string name="file_browser">File Browser</string>
+    <string name="project_files">Project Files</string>
+    <string name="select_folder">Select Folder</string>
+    <string name="no_recent_files">No recent files</string>
+    <string name="feature_coming_soon">Feature coming soon</string>
+</resources>
