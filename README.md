@@ -322,8 +322,9 @@ ENDMODULE
 - 💡 [EXAMPLES.md](EXAMPLES.md) - 使用示例 / Usage examples
 - 🤝 [CONTRIBUTING.md](CONTRIBUTING.md) - 贡献指南 / Contributing guide
 - 🔐 Privacy / 隐私
-  - 隐私政策 (中文): https://omocv.github.io/Android/privacy-policy-zh.html
-  - Privacy Policy (English): https://omocv.github.io/Android/privacy-policy-en.html
+  - Privacy Policy Landing Page / 隐私政策首页: https://omocv.github.io/ABB/privacy-policy.html
+  - 隐私政策 (中文): https://omocv.github.io/ABB/privacy-policy-zh.html
+  - Privacy Policy (English): https://omocv.github.io/ABB/privacy-policy-en.html
 
 ## 许可证
 
