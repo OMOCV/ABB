@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - ABB Robot Program Reader</title>
+    <meta name="description" content="Privacy Policy for ABB Robot Program Reader Android application">
+    <link rel="canonical" href="https://omocv.github.io/ABB/privacy-policy.html">
+    
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #333333;
+            --card-bg: #f5f5f5;
+            --border-color: #dddddd;
+            --link-color: #1976d2;
+            --link-hover: #1565c0;
+            --shadow: rgba(0, 0, 0, 0.1);
+        }
+        
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg-color: #1e1e1e;
+                --text-color: #e0e0e0;
+                --card-bg: #2d2d2d;
+                --border-color: #404040;
+                --link-color: #64b5f6;
+                --link-hover: #90caf9;
+                --shadow: rgba(0, 0, 0, 0.3);
+            }
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 20px;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: var(--text-color);
+        }
+        
+        .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-color);
+            opacity: 0.8;
+            margin-bottom: 2rem;
+        }
+        
+        .policy-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        
+        .policy-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px var(--shadow);
+        }
+        
+        .policy-card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+        
+        .policy-card .lang-label {
+            font-size: 0.9rem;
+            opacity: 0.7;
+            margin-bottom: 0.5rem;
+        }
+        
+        .policy-card .updated {
+            font-size: 0.9rem;
+            opacity: 0.6;
+            margin-bottom: 1rem;
+        }
+        
+        .policy-card a {
+            display: inline-block;
+            color: var(--link-color);
+            text-decoration: none;
+            font-weight: 500;
+            padding: 10px 20px;
+            border: 2px solid var(--link-color);
+            border-radius: 4px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        
+        .policy-card a:hover {
+            background-color: var(--link-color);
+            color: var(--bg-color);
+        }
+        
+        .recommended {
+            border: 2px solid var(--link-color);
+            position: relative;
+        }
+        
+        .recommended::before {
+            content: "Recommended for you";
+            position: absolute;
+            top: -12px;
+            left: 20px;
+            background: var(--link-color);
+            color: white;
+            padding: 2px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        
+        .footer {
+            margin-top: 3rem;
+            text-align: center;
+            font-size: 0.9rem;
+            opacity: 0.6;
+        }
+        
+        .footer a {
+            color: var(--link-color);
+            text-decoration: none;
+        }
+        
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        
+        @media (max-width: 600px) {
+            body {
+                padding: 10px;
+            }
+            
+            h1 {
+                font-size: 1.5rem;
+            }
+            
+            .policy-card {
+                padding: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Privacy Policy</h1>
+        <p class="subtitle">ABB Robot Program Reader for Android</p>
+        
+        <div id="policy-en" class="policy-card">
+            <h2>Privacy Policy (English)</h2>
+            <p class="lang-label">English Version</p>
+            <p class="updated" id="updated-en">Loading...</p>
+            <a href="https://omocv.github.io/ABB/privacy-policy-en.html">Read Privacy Policy →</a>
+        </div>
+        
+        <div id="policy-zh" class="policy-card">
+            <h2>隐私政策（中文）</h2>
+            <p class="lang-label">中文版本</p>
+            <p class="updated" id="updated-zh">加载中...</p>
+            <a href="https://omocv.github.io/ABB/privacy-policy-zh.html">查看隐私政策 →</a>
+        </div>
+        
+        <div class="footer">
+            <p>© 2025 OMOCV. All rights reserved.</p>
+            <p><a href="https://github.com/OMOCV/ABB">GitHub Repository</a></p>
+        </div>
+    </div>
+    
+    <script>
+        // Handle query parameter redirects
+        const urlParams = new URLSearchParams(window.location.search);
+        const langParam = urlParams.get('lang');
+        
+        if (langParam === 'zh') {
+            window.location.href = 'https://omocv.github.io/ABB/privacy-policy-zh.html';
+        } else if (langParam === 'en') {
+            window.location.href = 'https://omocv.github.io/ABB/privacy-policy-en.html';
+        }
+        
+        // Detect browser language and recommend appropriate policy
+        const userLang = navigator.language || navigator.userLanguage;
+        const isChineseLang = userLang.startsWith('zh');
+        
+        if (isChineseLang) {
+            document.getElementById('policy-zh').classList.add('recommended');
+        } else {
+            document.getElementById('policy-en').classList.add('recommended');
+        }
+        
+        // Fetch and display last_updated dates from markdown files
+        async function fetchLastUpdated(lang) {
+            try {
+                const response = await fetch(`privacy-policy-${lang}.md`);
+                const text = await response.text();
+                
+                // Extract last_updated from YAML frontmatter
+                const match = text.match(/last_updated:\s*(\d{4}-\d{2}-\d{2})/);
+                if (match) {
+                    return match[1];
+                }
+                
+                // Fallback: try to find "Last updated:" or "最后更新日期：" in content
+                const contentMatch = text.match(/(?:Last updated|最后更新日期):\s*(\d{4}-\d{2}-\d{2})/);
+                if (contentMatch) {
+                    return contentMatch[1];
+                }
+                
+                return null;
+            } catch (error) {
+                console.error(`Error fetching ${lang} policy:`, error);
+                return null;
+            }
+        }
+        
+        async function updateDates() {
+            const enDate = await fetchLastUpdated('en');
+            const zhDate = await fetchLastUpdated('zh');
+            
+            if (enDate) {
+                document.getElementById('updated-en').textContent = `Last updated: ${enDate}`;
+            } else {
+                document.getElementById('updated-en').textContent = '';
+            }
+            
+            if (zhDate) {
+                document.getElementById('updated-zh').textContent = `最后更新：${zhDate}`;
+            } else {
+                document.getElementById('updated-zh').textContent = '';
+            }
+        }
+        
+        // Load dates when page loads
+        updateDates();
+    </script>
+</body>
+</html>
