@@ -57,7 +57,7 @@ Serving a global audience including the EU means that if personal processing beg
 
 ## Contact Us
 Email: omowco@gmail.com  
-Developer: Heartbeat 
+Developer: Heartbeat  
 Registered address: None (independent developer)
 
 ## Changes to This Policy
