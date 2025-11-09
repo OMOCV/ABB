@@ -165,6 +165,31 @@ git push origin v1.0.0
 - Debug AAB: `app/build/outputs/bundle/debug/app-debug.aab`
 - Release AAB: `app/build/outputs/bundle/release/app-release.aab`
 
+### 构建签名应用 / Building Signed Applications
+
+要构建签名的发布版本，首先需要配置签名密钥：
+
+To build signed release versions, you need to configure signing keys first:
+
+```bash
+# 运行密钥生成脚本 / Run keystore generation script
+./generate-keystore.sh
+```
+
+然后构建签名版本 / Then build signed version:
+
+```bash
+# 构建签名 APK / Build signed APK
+./gradlew assembleRelease
+
+# 构建签名 AAB / Build signed AAB
+./gradlew bundleRelease
+```
+
+📖 详细的签名配置说明请参见 [SIGNING.md](SIGNING.md)
+
+For detailed signing configuration instructions, see [SIGNING.md](SIGNING.md)
+
 更多构建选项请参见 [BUILDING.md](BUILDING.md) 和 [BUILD_RESTRICTED.md](BUILD_RESTRICTED.md)
 
 ## 使用方法

@@ -29,6 +29,10 @@ render.experimental.xml
 *.keystore
 keystore.properties
 
+# Exception: Allow demo keystore for development
+!abb-release-key.jks
+!demo-keystore.properties
+
 # Google Services (e.g. APIs or Firebase)
 google-services.json
 
