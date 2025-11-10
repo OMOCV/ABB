@@ -173,8 +173,8 @@ class MainActivity : AppCompatActivity() {
             val content = inputStream?.bufferedReader()?.use { it.readText() } ?: ""
             inputStream?.close()
 
-            // Get filename from URI
-            val fileName = uri.lastPathSegment ?: "unknown"
+            // Get real filename from URI using content resolver
+            val fileName = getFileNameFromUri(uri) ?: uri.lastPathSegment ?: "unknown"
             val fileExtension = fileName.substringAfterLast(".", "")
 
             // Check if it's a supported ABB file
@@ -183,8 +183,8 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            // Create a temporary file for parsing
-            val tempFile = File.createTempFile("abb_temp", ".$fileExtension", cacheDir)
+            // Create a temporary file with original filename for parsing
+            val tempFile = File(cacheDir, fileName)
             tempFile.writeText(content)
 
             // Parse the file
@@ -201,6 +201,28 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, "文件读取错误: ${e.message}", Toast.LENGTH_LONG).show()
             e.printStackTrace()
         }
+    }
+    
+    private fun getFileNameFromUri(uri: Uri): String? {
+        var fileName: String? = null
+        if (uri.scheme == "content") {
+            val cursor = contentResolver.query(uri, null, null, null, null)
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val nameIndex = it.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex >= 0) {
+                        fileName = it.getString(nameIndex)
+                    }
+                }
+            }
+        }
+        if (fileName == null) {
+            fileName = uri.path?.let { path ->
+                val cut = path.lastIndexOf('/')
+                if (cut != -1) path.substring(cut + 1) else path
+            }
+        }
+        return fileName
     }
 
     private fun displayProgramFile(programFile: ABBProgramFile) {

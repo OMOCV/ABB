@@ -7,6 +7,59 @@ All notable changes to the ABB Robot Program Reader project will be documented i
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2025-11-10
+
+### Added / 新增
+- ✅ 液态玻璃主题效果 (Glassmorphism theme effect)
+  - 半透明背景效果
+  - 毛玻璃卡片样式
+  - 现代化的视觉设计
+  - 支持深色和浅色模式
+- ✅ 代码编辑功能 (Code editing functionality)
+  - 启用/禁用编辑模式
+  - 实时代码编辑
+  - 保存代码更改
+  - 未保存更改提示
+- ✅ 代码替换功能 (Code replace functionality)
+  - 搜索和替换对话框
+  - 全局替换所有匹配项
+  - 在例行程序中替换
+  - 在模块中替换
+  - 显示替换计数
+- ✅ 增强的语法检查 (Enhanced syntax checking)
+  - 全面的语法验证
+  - 检测所有代码块配对（MODULE/ENDMODULE, PROC/ENDPROC, FUNC/ENDFUNC, TRAP/ENDTRAP, IF/ENDIF, FOR/ENDFOR, WHILE/ENDWHILE, TEST/ENDTEST）
+  - 检测变量名有效性
+  - 检测未关闭的代码块
+  - 详细的错误报告（包含行号和错误信息）
+- ✅ 实时语法检查 (Real-time syntax checking)
+  - 编辑时自动检查语法
+  - 延迟检查避免性能问题
+  - 即时错误反馈
+- ✅ 文件名保持功能 (Preserve original filename)
+  - 使用内容解析器获取真实文件名
+  - 不再使用随机临时文件名
+  - 保持原始文件名用于显示和存储
+
+### Changed / 更改
+- 优化主题设计，采用流行的液态玻璃效果
+- 改进语法检查算法，提供更准确的验证
+- 增强代码查看器功能，支持编辑和替换
+- 改进文件处理逻辑，保持原始文件名
+
+### Fixed / 修复
+- 修复文件打开时文件名被修改的问题
+- 修复语法检查不准确的问题
+
+### Technical Details / 技术细节
+- 新增 `SyntaxError` 数据类用于存储语法错误信息
+- 增强 `ABBParser.validateSyntax()` 方法提供全面的语法验证
+- 更新 `CodeViewerActivity` 支持编辑和替换功能
+- 新增 `dialog_replace.xml` 布局文件
+- 更新颜色和主题资源支持液态玻璃效果
+- 添加 EditText 支持代码编辑
+- 实现 TextWatcher 用于实时语法检查
+
 ## [2.1.0] - 2025-11-09
 
 ### Added / 新增

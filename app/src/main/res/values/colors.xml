@@ -3,11 +3,28 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
     
-    <!-- ABB brand colors -->
+    <!-- ABB brand colors with glassmorphism -->
     <color name="abb_primary">#FF0000</color>
     <color name="abb_primary_dark">#CC0000</color>
     <color name="abb_accent">#FF6600</color>
     <color name="abb_accent_dark">#CC5200</color>
+    
+    <!-- Glassmorphism colors (semi-transparent) -->
+    <color name="glass_surface">#E6FFFFFF</color>
+    <color name="glass_surface_dark">#E61E1E1E</color>
+    <color name="glass_overlay">#33FFFFFF</color>
+    <color name="glass_border">#4DFFFFFF</color>
+    <color name="glass_shadow">#1A000000</color>
+    
+    <!-- Glassmorphism accent colors -->
+    <color name="glass_primary">#B3FF0000</color>
+    <color name="glass_accent">#B3FF6600</color>
+    
+    <!-- Background gradients for glassmorphism -->
+    <color name="glass_bg_start">#F5F5F5</color>
+    <color name="glass_bg_end">#E8E8E8</color>
+    <color name="glass_bg_dark_start">#1E1E1E</color>
+    <color name="glass_bg_dark_end">#121212</color>
     
     <!-- Syntax highlighting colors -->
     <color name="syntax_keyword">#0000FF</color>

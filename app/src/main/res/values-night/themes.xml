@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <!-- Dark theme -->
+    <!-- Dark theme with Glassmorphism -->
     <style name="Base.Theme.ABB" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/abb_primary_dark</item>
         <item name="colorPrimaryVariant">@color/abb_primary</item>
@@ -10,9 +10,21 @@
         <item name="colorOnSecondary">@color/white</item>
         <item name="android:colorBackground">#121212</item>
         <item name="colorSurface">#1E1E1E</item>
+        
+        <!-- Glassmorphism background for dark theme -->
+        <item name="android:windowBackground">@color/glass_bg_dark_start</item>
     </style>
 
     <style name="Theme.ABB" parent="Base.Theme.ABB" />
+    
+    <!-- Glassmorphism Card Style for Dark Theme -->
+    <style name="GlassCardStyle" parent="Widget.Material3.CardView.Elevated">
+        <item name="cardBackgroundColor">@color/glass_surface_dark</item>
+        <item name="cardElevation">8dp</item>
+        <item name="cardCornerRadius">16dp</item>
+        <item name="strokeColor">@color/glass_border</item>
+        <item name="strokeWidth">1dp</item>
+    </style>
     
     <style name="CodeTextStyle">
         <item name="android:fontFamily">monospace</item>

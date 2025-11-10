@@ -46,4 +46,29 @@
     <string name="select_folder">Select Folder</string>
     <string name="no_recent_files">No recent files</string>
     <string name="feature_coming_soon">Feature coming soon</string>
+    
+    <!-- Version 2.2.0 New Features -->
+    <string name="replace">Replace</string>
+    <string name="replace_code">Replace Code</string>
+    <string name="replace_with">Replace with</string>
+    <string name="replace_hint">Enter replacement text</string>
+    <string name="replace_all">Replace All</string>
+    <string name="replace_in_routine">Replace in Routine</string>
+    <string name="replace_in_module">Replace in Module</string>
+    <string name="replace_in_selection">Replace in Selection</string>
+    <string name="replaced_count">Replaced %d occurrence(s)</string>
+    <string name="edit_code">Edit Code</string>
+    <string name="save">Save</string>
+    <string name="save_changes">Save Changes</string>
+    <string name="discard_changes">Discard Changes</string>
+    <string name="unsaved_changes">Unsaved changes</string>
+    <string name="code_saved">Code saved</string>
+    <string name="undo">Undo</string>
+    <string name="redo">Redo</string>
+    <string name="real_time_syntax_check">Real-time Syntax Check</string>
+    <string name="syntax_error_line">Line %d: %s</string>
+    <string name="enable_editing">Enable Editing</string>
+    <string name="disable_editing">Disable Editing</string>
+    <string name="editing_enabled">Editing mode enabled</string>
+    <string name="editing_disabled">Editing mode disabled</string>
 </resources>

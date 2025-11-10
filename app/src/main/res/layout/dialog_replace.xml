@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:hint="@string/search_hint">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etSearchText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text" />
+
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <com.google.android.material.textfield.TextInputLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:hint="@string/replace_hint">
+
+        <com.google.android.material.textfield.TextInputEditText
+            android:id="@+id/etReplaceText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text" />
+
+    </com.google.android.material.textfield.TextInputLayout>
+
+    <RadioGroup
+        android:id="@+id/rgReplaceScope"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp">
+
+        <RadioButton
+            android:id="@+id/rbReplaceAll"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/replace_all"
+            android:checked="true" />
+
+        <RadioButton
+            android:id="@+id/rbReplaceInRoutine"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/replace_in_routine" />
+
+        <RadioButton
+            android:id="@+id/rbReplaceInModule"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/replace_in_module" />
+
+    </RadioGroup>
+
+</LinearLayout>
