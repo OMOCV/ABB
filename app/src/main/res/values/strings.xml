@@ -71,4 +71,19 @@
     <string name="disable_editing">禁用编辑</string>
     <string name="editing_enabled">编辑模式已启用</string>
     <string name="editing_disabled">编辑模式已禁用</string>
+    
+    <!-- Crash handling strings -->
+    <string name="crash_title">应用崩溃</string>
+    <string name="crash_message_with_log">应用遇到了一个错误并需要关闭。崩溃日志已保存到:\n\n%s\n\n您可以查看或分享此日志以帮助我们改进应用。</string>
+    <string name="crash_message_no_log">应用遇到了一个错误并需要关闭。</string>
+    <string name="crash_log">崩溃日志</string>
+    <string name="crash_log_subject">ABB 应用崩溃日志</string>
+    <string name="close_app">关闭应用</string>
+    <string name="view_log">查看日志</string>
+    <string name="share_log">分享日志</string>
+    <string name="error">错误</string>
+    <string name="failed_to_read_log">无法读取日志文件</string>
+    <string name="failed_to_share_log">无法分享日志文件</string>
+    <string name="failed_to_load_code_viewer">无法加载代码查看器，请重试</string>
+    <string name="failed_to_open_code_viewer">无法打开代码查看器，请重试</string>
 </resources>

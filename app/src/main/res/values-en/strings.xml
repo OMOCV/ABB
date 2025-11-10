@@ -71,4 +71,19 @@
     <string name="disable_editing">Disable Editing</string>
     <string name="editing_enabled">Editing mode enabled</string>
     <string name="editing_disabled">Editing mode disabled</string>
+    
+    <!-- Crash handling strings -->
+    <string name="crash_title">App Crashed</string>
+    <string name="crash_message_with_log">The app encountered an error and needs to close. A crash log has been saved to:\n\n%s\n\nYou can view or share this log to help us improve the app.</string>
+    <string name="crash_message_no_log">The app encountered an error and needs to close.</string>
+    <string name="crash_log">Crash Log</string>
+    <string name="crash_log_subject">ABB App Crash Log</string>
+    <string name="close_app">Close App</string>
+    <string name="view_log">View Log</string>
+    <string name="share_log">Share Log</string>
+    <string name="error">Error</string>
+    <string name="failed_to_read_log">Failed to read log file</string>
+    <string name="failed_to_share_log">Failed to share log file</string>
+    <string name="failed_to_load_code_viewer">Failed to load code viewer, please try again</string>
+    <string name="failed_to_open_code_viewer">Failed to open code viewer, please try again</string>
 </resources>

@@ -282,8 +282,17 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openCodeViewer(fileName: String, content: String) {
-        val intent = CodeViewerActivity.newIntent(this, fileName, content)
-        startActivity(intent)
+        try {
+            val intent = CodeViewerActivity.newIntent(this, fileName, content)
+            startActivity(intent)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error opening code viewer", e)
+            Toast.makeText(
+                this,
+                getString(R.string.failed_to_open_code_viewer),
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     private fun addToRecentFiles(fileName: String, fileUri: String) {

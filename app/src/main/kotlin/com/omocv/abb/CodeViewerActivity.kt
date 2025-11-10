@@ -60,18 +60,29 @@ class CodeViewerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Apply saved theme
-        applySavedTheme()
-        
-        setContentView(R.layout.activity_code_viewer)
-        
-        fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
-        fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
-        originalContent = fileContent
-        
-        initViews()
-        displayContent()
-        setupRealTimeSyntaxCheck()
+        try {
+            // Apply saved theme
+            applySavedTheme()
+            
+            setContentView(R.layout.activity_code_viewer)
+            
+            fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
+            fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
+            originalContent = fileContent
+            
+            initViews()
+            displayContent()
+            setupRealTimeSyntaxCheck()
+        } catch (e: Exception) {
+            // Log the error and show a user-friendly message
+            android.util.Log.e("CodeViewerActivity", "Error in onCreate", e)
+            Toast.makeText(
+                this,
+                getString(R.string.failed_to_load_code_viewer),
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
+        }
     }
 
     private fun initViews() {
