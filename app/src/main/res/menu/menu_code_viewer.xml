@@ -9,10 +9,28 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/action_replace"
+        android:title="@string/replace"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_edit"
+        android:icon="@android:drawable/ic_menu_edit"
+        android:title="@string/edit_code"
+        app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/action_save"
+        android:icon="@android:drawable/ic_menu_save"
+        android:title="@string/save"
+        android:visible="false"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/action_export"
         android:icon="@android:drawable/ic_menu_share"
         android:title="@string/export"
-        app:showAsAction="ifRoom" />
+        app:showAsAction="never" />
 
     <item
         android:id="@+id/action_bookmark"

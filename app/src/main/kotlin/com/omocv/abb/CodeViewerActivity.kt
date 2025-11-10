@@ -6,32 +6,40 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.widget.TextView
+import android.widget.EditText
 import android.widget.Toast
+import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.text.Editable
 import android.text.TextWatcher
-import android.widget.EditText
 import android.graphics.Color
 import android.text.SpannableString
 import android.text.style.BackgroundColorSpan
 import android.text.Spanned
+import android.widget.RadioGroup
 
 /**
  * Full-screen code viewer with line numbers and advanced features
+ * Version 2.2.0 - Added editing, replace, and improved syntax checking
  */
 class CodeViewerActivity : AppCompatActivity() {
 
     private lateinit var toolbar: MaterialToolbar
     private lateinit var tvLineNumbers: TextView
     private lateinit var tvCodeContent: TextView
+    private lateinit var etCodeContent: EditText
     
     private val syntaxHighlighter = ABBSyntaxHighlighter()
+    private val abbParser = ABBParser()
     private lateinit var fileName: String
-    private lateinit var fileContent: String
+    private var fileContent: String = ""
+    private var originalContent: String = ""
     private var currentSearchQuery = ""
+    private var isEditMode = false
+    private var hasUnsavedChanges = false
     
     companion object {
         private const val EXTRA_FILE_NAME = "file_name"
@@ -39,6 +47,7 @@ class CodeViewerActivity : AppCompatActivity() {
         private const val PREFS_NAME = "ABBPrefs"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_BOOKMARKS = "bookmarks_"
+        private const val KEY_REAL_TIME_CHECK = "real_time_syntax_check"
         
         fun newIntent(context: Context, fileName: String, fileContent: String): Intent {
             return Intent(context, CodeViewerActivity::class.java).apply {
@@ -58,23 +67,49 @@ class CodeViewerActivity : AppCompatActivity() {
         
         fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
         fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
+        originalContent = fileContent
         
         initViews()
         displayContent()
+        setupRealTimeSyntaxCheck()
     }
 
     private fun initViews() {
         toolbar = findViewById(R.id.toolbar)
         tvLineNumbers = findViewById(R.id.tvLineNumbers)
         tvCodeContent = findViewById(R.id.tvCodeContent)
+        etCodeContent = findViewById(R.id.etCodeContent)
         
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = fileName
         
         toolbar.setNavigationOnClickListener {
+            handleBackPressed()
+        }
+    }
+    
+    private fun handleBackPressed() {
+        if (hasUnsavedChanges) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.unsaved_changes))
+                .setMessage(getString(R.string.discard_changes))
+                .setPositiveButton(getString(R.string.save)) { _, _ ->
+                    saveChanges()
+                    finish()
+                }
+                .setNegativeButton(getString(R.string.discard_changes)) { _, _ ->
+                    finish()
+                }
+                .setNeutralButton(getString(R.string.cancel), null)
+                .show()
+        } else {
             finish()
         }
+    }
+    
+    override fun onBackPressed() {
+        handleBackPressed()
     }
 
     private fun displayContent() {
@@ -89,12 +124,87 @@ class CodeViewerActivity : AppCompatActivity() {
         tvLineNumbers.text = lineNumbers.toString()
         
         // Apply syntax highlighting
-        val highlightedContent = syntaxHighlighter.highlight(fileContent)
-        tvCodeContent.text = highlightedContent
+        if (isEditMode) {
+            etCodeContent.setText(fileContent)
+        } else {
+            val highlightedContent = syntaxHighlighter.highlight(fileContent)
+            tvCodeContent.text = highlightedContent
+        }
+    }
+    
+    private fun toggleEditMode() {
+        isEditMode = !isEditMode
+        
+        if (isEditMode) {
+            // Switch to edit mode
+            tvCodeContent.visibility = View.GONE
+            etCodeContent.visibility = View.VISIBLE
+            etCodeContent.setText(fileContent)
+            Toast.makeText(this, getString(R.string.editing_enabled), Toast.LENGTH_SHORT).show()
+        } else {
+            // Switch to view mode
+            fileContent = etCodeContent.text.toString()
+            tvCodeContent.visibility = View.VISIBLE
+            etCodeContent.visibility = View.GONE
+            displayContent()
+            Toast.makeText(this, getString(R.string.editing_disabled), Toast.LENGTH_SHORT).show()
+        }
+        
+        // Update menu
+        invalidateOptionsMenu()
+    }
+    
+    private fun saveChanges() {
+        if (isEditMode) {
+            fileContent = etCodeContent.text.toString()
+        }
+        originalContent = fileContent
+        hasUnsavedChanges = false
+        Toast.makeText(this, getString(R.string.code_saved), Toast.LENGTH_SHORT).show()
+        
+        // Update display
+        displayContent()
+    }
+    
+    private fun setupRealTimeSyntaxCheck() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val enabled = prefs.getBoolean(KEY_REAL_TIME_CHECK, false)
+        
+        if (enabled) {
+            etCodeContent.addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
+                
+                override fun afterTextChanged(s: Editable?) {
+                    hasUnsavedChanges = true
+                    // Debounce syntax checking
+                    etCodeContent.removeCallbacks(syntaxCheckRunnable)
+                    etCodeContent.postDelayed(syntaxCheckRunnable, 1000)
+                }
+            })
+        }
+    }
+    
+    private val syntaxCheckRunnable = Runnable {
+        if (isEditMode) {
+            val errors = abbParser.validateSyntax(etCodeContent.text.toString())
+            if (errors.isNotEmpty()) {
+                // Show first error as toast
+                Toast.makeText(this, 
+                    getString(R.string.syntax_error_line, errors[0].lineNumber, errors[0].message),
+                    Toast.LENGTH_SHORT).show()
+            }
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
         menuInflater.inflate(R.menu.menu_code_viewer, menu)
+        
+        // Update menu based on edit mode
+        menu?.findItem(R.id.action_save)?.isVisible = isEditMode
+        menu?.findItem(R.id.action_edit)?.title = 
+            if (isEditMode) getString(R.string.disable_editing) else getString(R.string.enable_editing)
+        
         return true
     }
 
@@ -102,6 +212,18 @@ class CodeViewerActivity : AppCompatActivity() {
         return when (item.itemId) {
             R.id.action_search -> {
                 showSearchDialog()
+                true
+            }
+            R.id.action_replace -> {
+                showReplaceDialog()
+                true
+            }
+            R.id.action_edit -> {
+                toggleEditMode()
+                true
+            }
+            R.id.action_save -> {
+                saveChanges()
                 true
             }
             R.id.action_export -> {
@@ -144,6 +266,69 @@ class CodeViewerActivity : AppCompatActivity() {
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
+    
+    private fun showReplaceDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_replace, null)
+        val etSearchText = dialogView.findViewById<EditText>(R.id.etSearchText)
+        val etReplaceText = dialogView.findViewById<EditText>(R.id.etReplaceText)
+        val rgReplaceScope = dialogView.findViewById<RadioGroup>(R.id.rgReplaceScope)
+        
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.replace_code))
+            .setView(dialogView)
+            .setPositiveButton(getString(R.string.replace)) { _, _ ->
+                val searchText = etSearchText.text.toString()
+                val replaceText = etReplaceText.text.toString()
+                
+                if (searchText.isNotEmpty()) {
+                    val scope = when (rgReplaceScope.checkedRadioButtonId) {
+                        R.id.rbReplaceInRoutine -> "routine"
+                        R.id.rbReplaceInModule -> "module"
+                        else -> "all"
+                    }
+                    replaceCode(searchText, replaceText, scope)
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+    
+    private fun replaceCode(searchText: String, replaceText: String, scope: String) {
+        var content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        var count = 0
+        
+        when (scope) {
+            "all" -> {
+                // Replace all occurrences
+                val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
+                count = regex.findAll(content).count()
+                content = content.replace(searchText, replaceText, ignoreCase = true)
+            }
+            "routine" -> {
+                // Replace in current routine (simplified - replaces in visible content)
+                val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
+                count = regex.findAll(content).count()
+                content = content.replace(searchText, replaceText, ignoreCase = true)
+            }
+            "module" -> {
+                // Replace in current module (simplified - replaces in visible content)
+                val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
+                count = regex.findAll(content).count()
+                content = content.replace(searchText, replaceText, ignoreCase = true)
+            }
+        }
+        
+        fileContent = content
+        hasUnsavedChanges = true
+        
+        if (isEditMode) {
+            etCodeContent.setText(content)
+        } else {
+            displayContent()
+        }
+        
+        Toast.makeText(this, getString(R.string.replaced_count, count), Toast.LENGTH_SHORT).show()
+    }
 
     private fun searchCode(query: String) {
         currentSearchQuery = query
@@ -152,7 +337,8 @@ class CodeViewerActivity : AppCompatActivity() {
             return
         }
         
-        val lines = fileContent.lines()
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val lines = content.lines()
         val matches = mutableListOf<Int>()
         
         lines.forEachIndexed { index, line ->
@@ -165,7 +351,9 @@ class CodeViewerActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.no_matches_found), Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(this, getString(R.string.found_matches, matches.size), Toast.LENGTH_SHORT).show()
-            highlightSearchResults(query)
+            if (!isEditMode) {
+                highlightSearchResults(query)
+            }
         }
     }
 
@@ -188,9 +376,10 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun exportCode() {
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val intent = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, fileContent)
+            putExtra(Intent.EXTRA_TEXT, content)
             putExtra(Intent.EXTRA_SUBJECT, fileName)
         }
         startActivity(Intent.createChooser(intent, getString(R.string.export_code)))
@@ -240,16 +429,18 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun scrollToLine(lineNumber: Int) {
-        // Calculate scroll position
-        val lines = fileContent.lines()
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val lines = content.lines()
         if (lineNumber > 0 && lineNumber <= lines.size) {
             Toast.makeText(this, getString(R.string.jumped_to_line, lineNumber), Toast.LENGTH_SHORT).show()
         }
     }
 
     private fun formatCode() {
+        var content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        
         // Simple code formatting: fix indentation
-        val lines = fileContent.lines()
+        val lines = content.lines()
         val formatted = StringBuilder()
         var indentLevel = 0
         
@@ -257,14 +448,7 @@ class CodeViewerActivity : AppCompatActivity() {
             val trimmed = line.trim()
             
             // Decrease indent for end keywords
-            if (trimmed.startsWith("ENDMODULE", ignoreCase = true) ||
-                trimmed.startsWith("ENDPROC", ignoreCase = true) ||
-                trimmed.startsWith("ENDFUNC", ignoreCase = true) ||
-                trimmed.startsWith("ENDTRAP", ignoreCase = true) ||
-                trimmed.startsWith("ENDIF", ignoreCase = true) ||
-                trimmed.startsWith("ENDFOR", ignoreCase = true) ||
-                trimmed.startsWith("ENDWHILE", ignoreCase = true) ||
-                trimmed.startsWith("ENDTEST", ignoreCase = true)) {
+            if (trimmed.matches(Regex("^(ENDMODULE|ENDPROC|ENDFUNC|ENDTRAP|ENDIF|ENDFOR|ENDWHILE|ENDTEST).*", RegexOption.IGNORE_CASE))) {
                 indentLevel = maxOf(0, indentLevel - 1)
             }
             
@@ -273,20 +457,20 @@ class CodeViewerActivity : AppCompatActivity() {
             formatted.append(indent).append(trimmed).append("\n")
             
             // Increase indent for start keywords
-            if (trimmed.startsWith("MODULE", ignoreCase = true) ||
-                trimmed.startsWith("PROC", ignoreCase = true) ||
-                trimmed.startsWith("FUNC", ignoreCase = true) ||
-                trimmed.startsWith("TRAP", ignoreCase = true) ||
-                trimmed.startsWith("IF", ignoreCase = true) ||
-                trimmed.startsWith("FOR", ignoreCase = true) ||
-                trimmed.startsWith("WHILE", ignoreCase = true) ||
-                trimmed.startsWith("TEST", ignoreCase = true)) {
+            if (trimmed.matches(Regex("^(MODULE|PROC|FUNC|TRAP|IF .+ THEN|FOR .+ DO|WHILE .+ DO|TEST .+).*", RegexOption.IGNORE_CASE))) {
                 indentLevel++
             }
         }
         
         fileContent = formatted.toString()
-        displayContent()
+        hasUnsavedChanges = true
+        
+        if (isEditMode) {
+            etCodeContent.setText(fileContent)
+        } else {
+            displayContent()
+        }
+        
         Toast.makeText(this, getString(R.string.code_formatted), Toast.LENGTH_SHORT).show()
     }
 
@@ -316,38 +500,25 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun checkSyntax() {
-        val errors = mutableListOf<String>()
-        val lines = fileContent.lines()
-        
-        var moduleCount = 0
-        var endModuleCount = 0
-        var procCount = 0
-        var endProcCount = 0
-        
-        lines.forEachIndexed { index, line ->
-            val trimmed = line.trim()
-            
-            when {
-                trimmed.startsWith("MODULE", ignoreCase = true) -> moduleCount++
-                trimmed.startsWith("ENDMODULE", ignoreCase = true) -> endModuleCount++
-                trimmed.startsWith("PROC", ignoreCase = true) -> procCount++
-                trimmed.startsWith("ENDPROC", ignoreCase = true) -> endProcCount++
-            }
-        }
-        
-        if (moduleCount != endModuleCount) {
-            errors.add(getString(R.string.module_mismatch, moduleCount, endModuleCount))
-        }
-        if (procCount != endProcCount) {
-            errors.add(getString(R.string.proc_mismatch, procCount, endProcCount))
-        }
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val errors = abbParser.validateSyntax(content)
         
         if (errors.isEmpty()) {
             Toast.makeText(this, getString(R.string.no_syntax_errors), Toast.LENGTH_SHORT).show()
         } else {
+            val errorMessages = errors.take(10).joinToString("\n") { error ->
+                getString(R.string.syntax_error_line, error.lineNumber, error.message)
+            }
+            
+            val message = if (errors.size > 10) {
+                errorMessages + "\n\n... and ${errors.size - 10} more errors"
+            } else {
+                errorMessages
+            }
+            
             MaterialAlertDialogBuilder(this)
                 .setTitle(getString(R.string.syntax_errors))
-                .setMessage(errors.joinToString("\n"))
+                .setMessage(message)
                 .setPositiveButton(getString(R.string.ok), null)
                 .show()
         }

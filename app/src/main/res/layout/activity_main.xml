@@ -34,6 +34,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSelectFile"
+                style="@style/GlassButtonStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/select_file"
@@ -60,12 +61,11 @@
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardModules"
+                style="@style/GlassCardStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:visibility="gone"
-                app:cardElevation="4dp"
-                app:cardCornerRadius="8dp">
+                android:visibility="gone">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -93,12 +93,11 @@
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardRoutines"
+                style="@style/GlassCardStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:visibility="gone"
-                app:cardElevation="4dp"
-                app:cardCornerRadius="8dp">
+                android:visibility="gone">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -126,12 +125,11 @@
 
             <com.google.android.material.card.MaterialCardView
                 android:id="@+id/cardContent"
+                style="@style/GlassCardStyle"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:visibility="gone"
-                app:cardElevation="4dp"
-                app:cardCornerRadius="8dp">
+                android:visibility="gone">
 
                 <LinearLayout
                     android:layout_width="match_parent"

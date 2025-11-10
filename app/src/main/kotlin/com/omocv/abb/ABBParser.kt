@@ -213,4 +213,148 @@ class ABBParser {
         val extension = file.extension.lowercase()
         return extension in setOf("mod", "prg", "sys")
     }
+    
+    /**
+     * Comprehensive syntax validation for RAPID code
+     */
+    fun validateSyntax(content: String): List<SyntaxError> {
+        val errors = mutableListOf<SyntaxError>()
+        val lines = content.lines()
+        
+        var moduleCount = 0
+        var endModuleCount = 0
+        val blockStack = mutableListOf<BlockInfo>()
+        
+        lines.forEachIndexed { index, line ->
+            val lineNumber = index + 1
+            val trimmed = line.trim()
+            
+            if (trimmed.isEmpty() || trimmed.startsWith("!")) {
+                return@forEachIndexed
+            }
+            
+            // Check MODULE/ENDMODULE matching
+            when {
+                trimmed.matches(Regex("^MODULE\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                    moduleCount++
+                    blockStack.add(BlockInfo("MODULE", lineNumber))
+                }
+                trimmed.matches(Regex("^ENDMODULE\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    endModuleCount++
+                    if (blockStack.isEmpty() || blockStack.last().type != "MODULE") {
+                        errors.add(SyntaxError(lineNumber, "ENDMODULE without matching MODULE"))
+                    } else {
+                        blockStack.removeAt(blockStack.size - 1)
+                    }
+                }
+                
+                // Check PROC/ENDPROC matching
+                trimmed.matches(Regex("^PROC\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                    blockStack.add(BlockInfo("PROC", lineNumber))
+                }
+                trimmed.matches(Regex("^ENDPROC\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    if (blockStack.isEmpty() || blockStack.last().type != "PROC") {
+                        errors.add(SyntaxError(lineNumber, "ENDPROC without matching PROC"))
+                    } else {
+                        blockStack.removeAt(blockStack.size - 1)
+                    }
+                }
+                
+                // Check FUNC/ENDFUNC matching
+                trimmed.matches(Regex("^FUNC\\s+\\w+\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                    blockStack.add(BlockInfo("FUNC", lineNumber))
+                }
+                trimmed.matches(Regex("^ENDFUNC\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    if (blockStack.isEmpty() || blockStack.last().type != "FUNC") {
+                        errors.add(SyntaxError(lineNumber, "ENDFUNC without matching FUNC"))
+                    } else {
+                        blockStack.removeAt(blockStack.size - 1)
+                    }
+                }
+                
+                // Check TRAP/ENDTRAP matching
+                trimmed.matches(Regex("^TRAP\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                    blockStack.add(BlockInfo("TRAP", lineNumber))
+                }
+                trimmed.matches(Regex("^ENDTRAP\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    if (blockStack.isEmpty() || blockStack.last().type != "TRAP") {
+                        errors.add(SyntaxError(lineNumber, "ENDTRAP without matching TRAP"))
+                    } else {
+                        blockStack.removeAt(blockStack.size - 1)
+                    }
+                }
+                
+                // Check IF/ENDIF matching
+                trimmed.matches(Regex("^IF\\s+.+\\s+THEN\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    blockStack.add(BlockInfo("IF", lineNumber))
+                }
+                trimmed.matches(Regex("^ENDIF\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    if (blockStack.isEmpty() || blockStack.last().type != "IF") {
+                        errors.add(SyntaxError(lineNumber, "ENDIF without matching IF"))
+                    } else {
+                        blockStack.removeAt(blockStack.size - 1)
+                    }
+                }
+                
+                // Check FOR/ENDFOR matching
+                trimmed.matches(Regex("^FOR\\s+.+\\s+FROM\\s+.+\\s+TO\\s+.+\\s+DO\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    blockStack.add(BlockInfo("FOR", lineNumber))
+                }
+                trimmed.matches(Regex("^ENDFOR\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    if (blockStack.isEmpty() || blockStack.last().type != "FOR") {
+                        errors.add(SyntaxError(lineNumber, "ENDFOR without matching FOR"))
+                    } else {
+                        blockStack.removeAt(blockStack.size - 1)
+                    }
+                }
+                
+                // Check WHILE/ENDWHILE matching
+                trimmed.matches(Regex("^WHILE\\s+.+\\s+DO\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    blockStack.add(BlockInfo("WHILE", lineNumber))
+                }
+                trimmed.matches(Regex("^ENDWHILE\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    if (blockStack.isEmpty() || blockStack.last().type != "WHILE") {
+                        errors.add(SyntaxError(lineNumber, "ENDWHILE without matching WHILE"))
+                    } else {
+                        blockStack.removeAt(blockStack.size - 1)
+                    }
+                }
+                
+                // Check TEST/ENDTEST matching
+                trimmed.matches(Regex("^TEST\\s+.+$", RegexOption.IGNORE_CASE)) -> {
+                    blockStack.add(BlockInfo("TEST", lineNumber))
+                }
+                trimmed.matches(Regex("^ENDTEST\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    if (blockStack.isEmpty() || blockStack.last().type != "TEST") {
+                        errors.add(SyntaxError(lineNumber, "ENDTEST without matching TEST"))
+                    } else {
+                        blockStack.removeAt(blockStack.size - 1)
+                    }
+                }
+            }
+            
+            // Check for invalid syntax patterns
+            if (trimmed.contains(":=")) {
+                // Check assignment statement has valid variable name
+                val parts = trimmed.split(":=")
+                if (parts.size >= 2) {
+                    val varName = parts[0].trim().split(Regex("\\s+")).last()
+                    if (!varName.matches(Regex("^[a-zA-Z_][a-zA-Z0-9_]*$"))) {
+                        errors.add(SyntaxError(lineNumber, "Invalid variable name: $varName"))
+                    }
+                }
+            }
+        }
+        
+        // Check for unclosed blocks
+        blockStack.forEach { block ->
+            errors.add(SyntaxError(block.lineNumber, "Unclosed ${block.type} block"))
+        }
+        
+        return errors
+    }
+    
+    data class BlockInfo(val type: String, val lineNumber: Int)
 }
+
+data class SyntaxError(val lineNumber: Int, val message: String)
