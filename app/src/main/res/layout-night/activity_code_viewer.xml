@@ -45,20 +45,43 @@
                 android:paddingEnd="8dp"
                 android:textColor="#999999" />
 
-            <!-- Code content -->
+            <!-- Code content - can be TextView or EditText based on mode -->
             <ScrollView
                 android:id="@+id/scrollViewCode"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent">
 
-                <TextView
-                    android:id="@+id/tvCodeContent"
-                    style="@style/CodeTextStyle"
+                <FrameLayout
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:background="#1E1E1E"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp" />
+                    android:layout_height="wrap_content">
+
+                    <TextView
+                        android:id="@+id/tvCodeContent"
+                        style="@style/CodeTextStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="#1E1E1E"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:textColor="#E0E0E0"
+                        android:visibility="visible" />
+
+                    <EditText
+                        android:id="@+id/etCodeContent"
+                        style="@style/CodeTextStyle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="#1E1E1E"
+                        android:paddingStart="8dp"
+                        android:paddingEnd="8dp"
+                        android:textColor="#E0E0E0"
+                        android:textColorHint="#808080"
+                        android:inputType="textMultiLine|textNoSuggestions"
+                        android:gravity="start|top"
+                        android:minWidth="400dp"
+                        android:visibility="gone" />
+
+                </FrameLayout>
 
             </ScrollView>
 
