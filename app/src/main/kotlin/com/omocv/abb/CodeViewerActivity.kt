@@ -11,6 +11,8 @@ import android.widget.Toast
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.text.Editable
@@ -23,7 +25,7 @@ import android.widget.RadioGroup
 
 /**
  * Full-screen code viewer with line numbers and advanced features
- * Version 2.2.0 - Added editing, replace, and improved syntax checking
+ * Version 2.3.0 - Enhanced search, replace, syntax checking with clickable results
  */
 class CodeViewerActivity : AppCompatActivity() {
 
@@ -330,11 +332,11 @@ class CodeViewerActivity : AppCompatActivity() {
         }
         
         val dialogView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
-        val rvRoutines = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvRoutines)
+        val rvRoutines = dialogView.findViewById<RecyclerView>(R.id.rvRoutines)
         val btnSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
         val btnDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
         
-        rvRoutines.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        rvRoutines.layoutManager = LinearLayoutManager(this)
         val adapter = RoutineSelectionAdapter(routines)
         rvRoutines.adapter = adapter
         
@@ -448,19 +450,11 @@ class CodeViewerActivity : AppCompatActivity() {
     private fun showSearchResultsDialog(results: List<SearchResultAdapter.SearchResult>, query: String) {
         val dialogView = layoutInflater.inflate(R.layout.dialog_search_results, null)
         val tvSearchResultsCount = dialogView.findViewById<TextView>(R.id.tvSearchResultsCount)
-        val rvSearchResults = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvSearchResults)
+        val rvSearchResults = dialogView.findViewById<RecyclerView>(R.id.rvSearchResults)
         
         tvSearchResultsCount.text = getString(R.string.search_results_count, results.size)
         
-        rvSearchResults.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
-        rvSearchResults.adapter = SearchResultAdapter(results, query) { result ->
-            // Jump to the line when clicked
-            jumpToLine(result.lineNumber)
-            // Dismiss dialog
-            (dialogView.parent as? android.view.ViewGroup)?.let { parent ->
-                parent.removeView(dialogView)
-            }
-        }
+        rvSearchResults.layoutManager = LinearLayoutManager(this)
         
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.search_results))
@@ -468,7 +462,7 @@ class CodeViewerActivity : AppCompatActivity() {
             .setNegativeButton(getString(R.string.close), null)
             .create()
         
-        // Set item click to dismiss dialog
+        // Set adapter with click listener to dismiss dialog
         rvSearchResults.adapter = SearchResultAdapter(results, query) { result ->
             jumpToLine(result.lineNumber)
             dialog.dismiss()
@@ -627,11 +621,11 @@ class CodeViewerActivity : AppCompatActivity() {
     private fun showSyntaxErrorsDialog(errors: List<SyntaxError>) {
         val dialogView = layoutInflater.inflate(R.layout.dialog_search_results, null)
         val tvSearchResultsCount = dialogView.findViewById<TextView>(R.id.tvSearchResultsCount)
-        val rvSearchResults = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvSearchResults)
+        val rvSearchResults = dialogView.findViewById<RecyclerView>(R.id.rvSearchResults)
         
         tvSearchResultsCount.text = getString(R.string.syntax_errors_found, errors.size)
         
-        rvSearchResults.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        rvSearchResults.layoutManager = LinearLayoutManager(this)
         
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.syntax_errors))
