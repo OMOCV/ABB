@@ -112,8 +112,6 @@ class CodeViewerActivity : AppCompatActivity() {
             // Don't finish - allow user to see what's displayed
         }
     }
-        }
-    }
 
     private fun initViews() {
         toolbar = findViewById(R.id.toolbar)
