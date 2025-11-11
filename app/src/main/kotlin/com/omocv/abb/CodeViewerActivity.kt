@@ -65,38 +65,53 @@ class CodeViewerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Apply saved theme
+        applySavedTheme()
+        
         try {
-            // Apply saved theme
-            applySavedTheme()
-            
             setContentView(R.layout.activity_code_viewer)
-            
-            fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
-            fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
-            originalContent = fileContent
-            
-            // Parse the file content to get routines info
-            try {
-                val tempFile = java.io.File(cacheDir, fileName)
-                tempFile.writeText(fileContent)
-                currentProgramFile = abbParser.parseFile(tempFile)
-                tempFile.delete()
-            } catch (e: Exception) {
-                android.util.Log.e("CodeViewerActivity", "Error parsing file", e)
-            }
-            
-            initViews()
-            displayContent()
-            setupRealTimeSyntaxCheck()
         } catch (e: Exception) {
-            // Log the error and show a user-friendly message
-            android.util.Log.e("CodeViewerActivity", "Error in onCreate", e)
+            // Layout inflation error is fatal
+            android.util.Log.e("CodeViewerActivity", "Error inflating layout", e)
             Toast.makeText(
                 this,
                 getString(R.string.failed_to_load_code_viewer),
                 Toast.LENGTH_LONG
             ).show()
             finish()
+            return
+        }
+        
+        fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
+        fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
+        originalContent = fileContent
+        
+        // Parse the file content to get routines info
+        try {
+            val tempFile = java.io.File(cacheDir, fileName)
+            tempFile.writeText(fileContent)
+            currentProgramFile = abbParser.parseFile(tempFile)
+            tempFile.delete()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error parsing file", e)
+            // Continue even if parsing fails - we can still display the content
+        }
+        
+        try {
+            initViews()
+            displayContent()
+            setupRealTimeSyntaxCheck()
+        } catch (e: Exception) {
+            // Log the error but try to continue
+            android.util.Log.e("CodeViewerActivity", "Error in initialization", e)
+            Toast.makeText(
+                this,
+                getString(R.string.failed_to_load_code_viewer),
+                Toast.LENGTH_LONG
+            ).show()
+            // Don't finish - allow user to see what's displayed
+        }
+    }
         }
     }
 
