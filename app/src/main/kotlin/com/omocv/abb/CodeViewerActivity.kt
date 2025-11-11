@@ -30,7 +30,7 @@ class CodeViewerActivity : AppCompatActivity() {
     private lateinit var toolbar: MaterialToolbar
     private lateinit var tvLineNumbers: TextView
     private lateinit var tvCodeContent: TextView
-    private lateinit var etCodeContent: EditText
+    private lateinit var etCodeContent: SyntaxHighlightEditText
     
     private val syntaxHighlighter = ABBSyntaxHighlighter()
     private val abbParser = ABBParser()
@@ -40,6 +40,7 @@ class CodeViewerActivity : AppCompatActivity() {
     private var currentSearchQuery = ""
     private var isEditMode = false
     private var hasUnsavedChanges = false
+    private var currentProgramFile: ABBProgramFile? = null
     
     companion object {
         private const val EXTRA_FILE_NAME = "file_name"
@@ -69,6 +70,16 @@ class CodeViewerActivity : AppCompatActivity() {
             fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
             fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
             originalContent = fileContent
+            
+            // Parse the file content to get routines info
+            try {
+                val tempFile = java.io.File(cacheDir, fileName)
+                tempFile.writeText(fileContent)
+                currentProgramFile = abbParser.parseFile(tempFile)
+                tempFile.delete()
+            } catch (e: Exception) {
+                android.util.Log.e("CodeViewerActivity", "Error parsing file", e)
+            }
             
             initViews()
             displayContent()
@@ -151,6 +162,7 @@ class CodeViewerActivity : AppCompatActivity() {
             tvCodeContent.visibility = View.GONE
             etCodeContent.visibility = View.VISIBLE
             etCodeContent.setText(fileContent)
+            etCodeContent.setHighlightingEnabled(true)  // Enable syntax highlighting in edit mode
             Toast.makeText(this, getString(R.string.editing_enabled), Toast.LENGTH_SHORT).show()
         } else {
             // Switch to view mode
@@ -293,18 +305,63 @@ class CodeViewerActivity : AppCompatActivity() {
                 
                 if (searchText.isNotEmpty()) {
                     val scope = when (rgReplaceScope.checkedRadioButtonId) {
-                        R.id.rbReplaceInRoutine -> "routine"
+                        R.id.rbReplaceInRoutine -> {
+                            // Show routine selection dialog
+                            showRoutineSelectionDialog(searchText, replaceText)
+                            return@setPositiveButton
+                        }
                         R.id.rbReplaceInModule -> "module"
                         else -> "all"
                     }
-                    replaceCode(searchText, replaceText, scope)
+                    replaceCode(searchText, replaceText, scope, null)
                 }
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
-    private fun replaceCode(searchText: String, replaceText: String, scope: String) {
+    private fun showRoutineSelectionDialog(searchText: String, replaceText: String) {
+        val routines = currentProgramFile?.routines ?: emptyList()
+        
+        if (routines.isEmpty()) {
+            Toast.makeText(this, getString(R.string.no_routines_selected), Toast.LENGTH_SHORT).show()
+            replaceCode(searchText, replaceText, "all", null)
+            return
+        }
+        
+        val dialogView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
+        val rvRoutines = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvRoutines)
+        val btnSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
+        val btnDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
+        
+        rvRoutines.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        val adapter = RoutineSelectionAdapter(routines)
+        rvRoutines.adapter = adapter
+        
+        btnSelectAll.setOnClickListener {
+            adapter.selectAll()
+        }
+        
+        btnDeselectAll.setOnClickListener {
+            adapter.deselectAll()
+        }
+        
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.select_routines))
+            .setView(dialogView)
+            .setPositiveButton(getString(R.string.replace)) { _, _ ->
+                val selectedRoutines = adapter.getSelectedRoutines()
+                if (selectedRoutines.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.no_routines_selected), Toast.LENGTH_SHORT).show()
+                } else {
+                    replaceCode(searchText, replaceText, "routine", selectedRoutines)
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+    
+    private fun replaceCode(searchText: String, replaceText: String, scope: String, selectedRoutines: List<ABBRoutine>?) {
         var content = if (isEditMode) etCodeContent.text.toString() else fileContent
         var count = 0
         
@@ -316,10 +373,25 @@ class CodeViewerActivity : AppCompatActivity() {
                 content = content.replace(searchText, replaceText, ignoreCase = true)
             }
             "routine" -> {
-                // Replace in current routine (simplified - replaces in visible content)
-                val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
-                count = regex.findAll(content).count()
-                content = content.replace(searchText, replaceText, ignoreCase = true)
+                // Replace only in selected routines
+                if (selectedRoutines != null && selectedRoutines.isNotEmpty()) {
+                    val lines = content.lines().toMutableList()
+                    
+                    for (routine in selectedRoutines) {
+                        for (lineIdx in routine.startLine..routine.endLine.coerceAtMost(lines.size - 1)) {
+                            if (lineIdx < lines.size) {
+                                val line = lines[lineIdx]
+                                if (line.contains(searchText, ignoreCase = true)) {
+                                    val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
+                                    count += regex.findAll(line).count()
+                                    lines[lineIdx] = line.replace(searchText, replaceText, ignoreCase = true)
+                                }
+                            }
+                        }
+                    }
+                    
+                    content = lines.joinToString("\n")
+                }
             }
             "module" -> {
                 // Replace in current module (simplified - replaces in visible content)
@@ -350,40 +422,79 @@ class CodeViewerActivity : AppCompatActivity() {
         
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val lines = content.lines()
-        val matches = mutableListOf<Int>()
+        val results = mutableListOf<SearchResultAdapter.SearchResult>()
         
         lines.forEachIndexed { index, line ->
             if (line.contains(query, ignoreCase = true)) {
-                matches.add(index + 1)
+                val startIndex = line.indexOf(query, ignoreCase = true)
+                results.add(
+                    SearchResultAdapter.SearchResult(
+                        lineNumber = index + 1,
+                        lineContent = line,
+                        startIndex = startIndex,
+                        endIndex = startIndex + query.length
+                    )
+                )
             }
         }
         
-        if (matches.isEmpty()) {
+        if (results.isEmpty()) {
             Toast.makeText(this, getString(R.string.no_matches_found), Toast.LENGTH_SHORT).show()
         } else {
-            Toast.makeText(this, getString(R.string.found_matches, matches.size), Toast.LENGTH_SHORT).show()
-            if (!isEditMode) {
-                highlightSearchResults(query)
-            }
+            showSearchResultsDialog(results, query)
         }
     }
-
-    private fun highlightSearchResults(query: String) {
-        val spannable = SpannableString(fileContent)
-        var index = fileContent.indexOf(query, 0, ignoreCase = true)
+    
+    private fun showSearchResultsDialog(results: List<SearchResultAdapter.SearchResult>, query: String) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_search_results, null)
+        val tvSearchResultsCount = dialogView.findViewById<TextView>(R.id.tvSearchResultsCount)
+        val rvSearchResults = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvSearchResults)
         
-        while (index >= 0) {
-            spannable.setSpan(
-                BackgroundColorSpan(Color.YELLOW),
-                index,
-                index + query.length,
-                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-            )
-            index = fileContent.indexOf(query, index + 1, ignoreCase = true)
+        tvSearchResultsCount.text = getString(R.string.search_results_count, results.size)
+        
+        rvSearchResults.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        rvSearchResults.adapter = SearchResultAdapter(results, query) { result ->
+            // Jump to the line when clicked
+            jumpToLine(result.lineNumber)
+            // Dismiss dialog
+            (dialogView.parent as? android.view.ViewGroup)?.let { parent ->
+                parent.removeView(dialogView)
+            }
         }
         
-        val highlightedContent = syntaxHighlighter.highlight(fileContent)
-        tvCodeContent.text = highlightedContent
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.search_results))
+            .setView(dialogView)
+            .setNegativeButton(getString(R.string.close), null)
+            .create()
+        
+        // Set item click to dismiss dialog
+        rvSearchResults.adapter = SearchResultAdapter(results, query) { result ->
+            jumpToLine(result.lineNumber)
+            dialog.dismiss()
+        }
+        
+        dialog.show()
+    }
+    
+    private fun jumpToLine(lineNumber: Int) {
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val lines = content.lines()
+        if (lineNumber > 0 && lineNumber <= lines.size) {
+            // Calculate the character position of the line
+            var charPosition = 0
+            for (i in 0 until lineNumber - 1) {
+                charPosition += lines[i].length + 1 // +1 for newline
+            }
+            
+            if (isEditMode) {
+                // Set cursor to the line in edit mode
+                etCodeContent.setSelection(charPosition.coerceAtMost(etCodeContent.text.length))
+                etCodeContent.requestFocus()
+            }
+            
+            Toast.makeText(this, getString(R.string.jumped_to_line, lineNumber), Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun exportCode() {
@@ -433,18 +544,10 @@ class CodeViewerActivity : AppCompatActivity() {
             .setTitle(getString(R.string.bookmarks))
             .setItems(items) { _, which ->
                 val lineNumber = bookmarks.sorted()[which].toInt()
-                scrollToLine(lineNumber)
+                jumpToLine(lineNumber)
             }
             .setNegativeButton(getString(R.string.close), null)
             .show()
-    }
-
-    private fun scrollToLine(lineNumber: Int) {
-        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val lines = content.lines()
-        if (lineNumber > 0 && lineNumber <= lines.size) {
-            Toast.makeText(this, getString(R.string.jumped_to_line, lineNumber), Toast.LENGTH_SHORT).show()
-        }
     }
 
     private fun formatCode() {
@@ -517,21 +620,30 @@ class CodeViewerActivity : AppCompatActivity() {
         if (errors.isEmpty()) {
             Toast.makeText(this, getString(R.string.no_syntax_errors), Toast.LENGTH_SHORT).show()
         } else {
-            val errorMessages = errors.take(10).joinToString("\n") { error ->
-                getString(R.string.syntax_error_line, error.lineNumber, error.message)
-            }
-            
-            val message = if (errors.size > 10) {
-                errorMessages + "\n\n... and ${errors.size - 10} more errors"
-            } else {
-                errorMessages
-            }
-            
-            MaterialAlertDialogBuilder(this)
-                .setTitle(getString(R.string.syntax_errors))
-                .setMessage(message)
-                .setPositiveButton(getString(R.string.ok), null)
-                .show()
+            showSyntaxErrorsDialog(errors)
         }
+    }
+    
+    private fun showSyntaxErrorsDialog(errors: List<SyntaxError>) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_search_results, null)
+        val tvSearchResultsCount = dialogView.findViewById<TextView>(R.id.tvSearchResultsCount)
+        val rvSearchResults = dialogView.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.rvSearchResults)
+        
+        tvSearchResultsCount.text = getString(R.string.syntax_errors_found, errors.size)
+        
+        rvSearchResults.layoutManager = androidx.recyclerview.widget.LinearLayoutManager(this)
+        
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.syntax_errors))
+            .setView(dialogView)
+            .setPositiveButton(getString(R.string.ok), null)
+            .create()
+        
+        rvSearchResults.adapter = SyntaxErrorAdapter(errors) { error ->
+            jumpToLine(error.lineNumber)
+            dialog.dismiss()
+        }
+        
+        dialog.show()
     }
 }

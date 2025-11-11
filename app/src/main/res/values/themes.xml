@@ -10,6 +10,13 @@
         <item name="colorSecondaryVariant">@color/abb_accent_dark</item>
         <item name="colorOnSecondary">@color/white</item>
         
+        <!-- Improved menu/toolbar colors for light theme -->
+        <item name="android:colorBackground">@color/menu_bg_light</item>
+        <item name="colorSurface">@color/menu_bg_light</item>
+        <item name="colorOnSurface">@color/menu_text_light</item>
+        <item name="android:textColorPrimary">@color/menu_text_light</item>
+        <item name="android:textColorSecondary">@color/menu_icon_light</item>
+        
         <!-- Glassmorphism background -->
         <item name="android:windowBackground">@color/glass_bg_start</item>
     </style>
