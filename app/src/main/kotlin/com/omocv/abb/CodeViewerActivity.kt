@@ -30,6 +30,8 @@ import android.widget.RadioGroup
 class CodeViewerActivity : AppCompatActivity() {
 
     private lateinit var toolbar: MaterialToolbar
+    private lateinit var scrollViewLineNumbers: android.widget.ScrollView
+    private lateinit var scrollViewCode: android.widget.ScrollView
     private lateinit var tvLineNumbers: TextView
     private lateinit var tvCodeContent: TextView
     private lateinit var etCodeContent: SyntaxHighlightEditText
@@ -43,6 +45,7 @@ class CodeViewerActivity : AppCompatActivity() {
     private var isEditMode = false
     private var hasUnsavedChanges = false
     private var currentProgramFile: ABBProgramFile? = null
+    private var isScrollSyncing = false  // Flag to prevent infinite scroll loop
     
     companion object {
         private const val EXTRA_FILE_NAME = "file_name"
@@ -63,43 +66,58 @@ class CodeViewerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        // Apply saved theme
+        applySavedTheme()
+        
         try {
-            // Apply saved theme
-            applySavedTheme()
-            
             setContentView(R.layout.activity_code_viewer)
-            
-            fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
-            fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
-            originalContent = fileContent
-            
-            // Parse the file content to get routines info
-            try {
-                val tempFile = java.io.File(cacheDir, fileName)
-                tempFile.writeText(fileContent)
-                currentProgramFile = abbParser.parseFile(tempFile)
-                tempFile.delete()
-            } catch (e: Exception) {
-                android.util.Log.e("CodeViewerActivity", "Error parsing file", e)
-            }
-            
-            initViews()
-            displayContent()
-            setupRealTimeSyntaxCheck()
         } catch (e: Exception) {
-            // Log the error and show a user-friendly message
-            android.util.Log.e("CodeViewerActivity", "Error in onCreate", e)
+            // Layout inflation error is fatal
+            android.util.Log.e("CodeViewerActivity", "Error inflating layout", e)
             Toast.makeText(
                 this,
                 getString(R.string.failed_to_load_code_viewer),
                 Toast.LENGTH_LONG
             ).show()
             finish()
+            return
+        }
+        
+        fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
+        fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
+        originalContent = fileContent
+        
+        // Parse the file content to get routines info
+        try {
+            val tempFile = java.io.File(cacheDir, fileName)
+            tempFile.writeText(fileContent)
+            currentProgramFile = abbParser.parseFile(tempFile)
+            tempFile.delete()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error parsing file", e)
+            // Continue even if parsing fails - we can still display the content
+        }
+        
+        try {
+            initViews()
+            displayContent()
+            setupRealTimeSyntaxCheck()
+        } catch (e: Exception) {
+            // Log the error but try to continue
+            android.util.Log.e("CodeViewerActivity", "Error in initialization", e)
+            Toast.makeText(
+                this,
+                getString(R.string.failed_to_load_code_viewer),
+                Toast.LENGTH_LONG
+            ).show()
+            // Don't finish - allow user to see what's displayed
         }
     }
 
     private fun initViews() {
         toolbar = findViewById(R.id.toolbar)
+        scrollViewLineNumbers = findViewById(R.id.scrollViewLineNumbers)
+        scrollViewCode = findViewById(R.id.scrollViewCode)
         tvLineNumbers = findViewById(R.id.tvLineNumbers)
         tvCodeContent = findViewById(R.id.tvCodeContent)
         etCodeContent = findViewById(R.id.etCodeContent)
@@ -110,6 +128,29 @@ class CodeViewerActivity : AppCompatActivity() {
         
         toolbar.setNavigationOnClickListener {
             handleBackPressed()
+        }
+        
+        // Synchronize scrolling between line numbers and code content
+        setupScrollSynchronization()
+    }
+    
+    private fun setupScrollSynchronization() {
+        // Listen to code content scroll changes
+        scrollViewCode.viewTreeObserver.addOnScrollChangedListener {
+            if (!isScrollSyncing) {
+                isScrollSyncing = true
+                scrollViewLineNumbers.scrollTo(0, scrollViewCode.scrollY)
+                isScrollSyncing = false
+            }
+        }
+        
+        // Listen to line numbers scroll changes
+        scrollViewLineNumbers.viewTreeObserver.addOnScrollChangedListener {
+            if (!isScrollSyncing) {
+                isScrollSyncing = true
+                scrollViewCode.scrollTo(0, scrollViewLineNumbers.scrollY)
+                isScrollSyncing = false
+            }
         }
     }
     
