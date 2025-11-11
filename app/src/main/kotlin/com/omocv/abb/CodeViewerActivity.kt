@@ -2,6 +2,7 @@ package com.omocv.abb
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -20,6 +21,7 @@ import android.text.TextWatcher
 import android.graphics.Color
 import android.text.SpannableString
 import android.text.style.BackgroundColorSpan
+import android.text.Spannable
 import android.text.Spanned
 import android.widget.RadioGroup
 
@@ -48,6 +50,18 @@ class CodeViewerActivity : AppCompatActivity() {
     private var currentProgramFile: ABBProgramFile? = null
     private var isScrollSyncing = false  // Flag to prevent infinite scroll loop
     private var currentHighlightedLine: Int = -1  // Track currently highlighted line
+    
+    // File save launcher for save-as functionality
+    private val saveFileLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            result.data?.data?.let { uri ->
+                val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+                saveToUri(uri, content)
+            }
+        }
+    }
     
     companion object {
         private const val EXTRA_FILE_NAME = "file_name"
@@ -240,7 +254,7 @@ class CodeViewerActivity : AppCompatActivity() {
             .setMessage(getString(R.string.save_confirmation))
             .setPositiveButton(getString(R.string.overwrite_file)) { _, _ ->
                 if (fileUri != null) {
-                    saveToUri(android.net.Uri.parse(fileUri), fileContent)
+                    saveToUri(Uri.parse(fileUri), fileContent)
                 } else {
                     saveAsNewFile(fileContent)
                 }
@@ -252,7 +266,7 @@ class CodeViewerActivity : AppCompatActivity() {
             .show()
     }
     
-    private fun saveToUri(uri: android.net.Uri, content: String) {
+    private fun saveToUri(uri: Uri, content: String) {
         try {
             contentResolver.openOutputStream(uri, "wt")?.use { outputStream ->
                 outputStream.write(content.toByteArray())
@@ -278,17 +292,6 @@ class CodeViewerActivity : AppCompatActivity() {
         } catch (e: Exception) {
             android.util.Log.e("CodeViewerActivity", "Error launching save file picker", e)
             Toast.makeText(this, getString(R.string.file_save_failed), Toast.LENGTH_SHORT).show()
-        }
-    }
-    
-    private val saveFileLauncher = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == RESULT_OK) {
-            result.data?.data?.let { uri ->
-                val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-                saveToUri(uri, content)
-            }
         }
     }
     
