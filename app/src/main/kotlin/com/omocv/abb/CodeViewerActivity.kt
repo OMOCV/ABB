@@ -269,17 +269,41 @@ class CodeViewerActivity : AppCompatActivity() {
     
     private fun saveToUri(uri: Uri, content: String) {
         try {
-            // Use "w" mode to truncate and write - compatible with all API levels
-            contentResolver.openOutputStream(uri, "w")?.use { outputStream ->
-                outputStream.write(content.toByteArray())
+            // Try to take persistable URI permissions if not already held
+            try {
+                val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                contentResolver.takePersistableUriPermission(uri, takeFlags)
+            } catch (e: SecurityException) {
+                // Permission might already be held or not available for this URI
+                android.util.Log.d("CodeViewerActivity", "Could not take persistable permission: ${e.message}")
             }
+            
+            // Use "wt" mode (write truncate) which is more reliable for text files
+            // If that fails, fall back to "w" mode
+            var outputStream = try {
+                contentResolver.openOutputStream(uri, "wt")
+            } catch (e: Exception) {
+                contentResolver.openOutputStream(uri, "w")
+            }
+            
+            outputStream?.use { stream ->
+                stream.write(content.toByteArray(Charsets.UTF_8))
+                stream.flush()
+            } ?: throw Exception("Could not open output stream for URI")
+            
             originalContent = content
             hasUnsavedChanges = false
             Toast.makeText(this, getString(R.string.file_saved_successfully), Toast.LENGTH_SHORT).show()
             displayContent()
         } catch (e: Exception) {
             android.util.Log.e("CodeViewerActivity", "Error saving file", e)
-            Toast.makeText(this, getString(R.string.file_save_failed) + ": ${e.message}", Toast.LENGTH_LONG).show()
+            // Provide more specific error message
+            val errorMsg = when {
+                e.message?.contains("Permission denied") == true || e is SecurityException -> 
+                    getString(R.string.file_save_failed) + ": " + getString(R.string.permission_denied_try_save_as)
+                else -> getString(R.string.file_save_failed) + ": ${e.message}"
+            }
+            Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
         }
     }
     
