@@ -34,4 +34,12 @@
     <color name="syntax_function">#800080</color>
     <color name="syntax_type">#2B91AF</color>
     <color name="syntax_default">#000000</color>
+    
+    <!-- Menu and toolbar colors - improved for better visual appeal -->
+    <color name="menu_bg_light">#FFFFFF</color>
+    <color name="menu_bg_dark">#2C2C2C</color>
+    <color name="menu_text_light">#212121</color>
+    <color name="menu_text_dark">#FFFFFF</color>
+    <color name="menu_icon_light">#5F6368</color>
+    <color name="menu_icon_dark">#E8EAED</color>
 </resources>

@@ -8,8 +8,13 @@
         <item name="colorSecondary">@color/abb_accent_dark</item>
         <item name="colorSecondaryVariant">@color/abb_accent</item>
         <item name="colorOnSecondary">@color/white</item>
-        <item name="android:colorBackground">#121212</item>
-        <item name="colorSurface">#1E1E1E</item>
+        
+        <!-- Improved menu/toolbar colors for dark theme -->
+        <item name="android:colorBackground">@color/menu_bg_dark</item>
+        <item name="colorSurface">@color/menu_bg_dark</item>
+        <item name="colorOnSurface">@color/menu_text_dark</item>
+        <item name="android:textColorPrimary">@color/menu_text_dark</item>
+        <item name="android:textColorSecondary">@color/menu_icon_dark</item>
         
         <!-- Glassmorphism background for dark theme -->
         <item name="android:windowBackground">@color/glass_bg_dark_start</item>

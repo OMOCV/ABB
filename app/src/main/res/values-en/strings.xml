@@ -86,4 +86,15 @@
     <string name="failed_to_share_log">Failed to share log file</string>
     <string name="failed_to_load_code_viewer">Failed to load code viewer, please try again</string>
     <string name="failed_to_open_code_viewer">Failed to open code viewer, please try again</string>
+    
+    <!-- Version 2.3.0 New Features - Search & Replace Enhancements -->
+    <string name="search_results">Search Results</string>
+    <string name="search_results_count">Found %d results</string>
+    <string name="select_routines">Select Routines</string>
+    <string name="select_all">Select All</string>
+    <string name="deselect_all">Deselect All</string>
+    <string name="no_routines_selected">No routines selected</string>
+    <string name="routines_selected">%d routines selected</string>
+    <string name="jump_to_error">Click to jump to error location</string>
+    <string name="syntax_errors_found">Found %d syntax errors, click to jump</string>
 </resources>

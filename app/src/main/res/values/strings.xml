@@ -86,4 +86,15 @@
     <string name="failed_to_share_log">无法分享日志文件</string>
     <string name="failed_to_load_code_viewer">无法加载代码查看器，请重试</string>
     <string name="failed_to_open_code_viewer">无法打开代码查看器，请重试</string>
+    
+    <!-- Version 2.3.0 New Features - Search & Replace Enhancements -->
+    <string name="search_results">搜索结果</string>
+    <string name="search_results_count">找到 %d 个结果</string>
+    <string name="select_routines">选择例行程序</string>
+    <string name="select_all">全选</string>
+    <string name="deselect_all">取消全选</string>
+    <string name="no_routines_selected">未选择任何例行程序</string>
+    <string name="routines_selected">已选择 %d 个例行程序</string>
+    <string name="jump_to_error">点击跳转到错误位置</string>
+    <string name="syntax_errors_found">发现 %d 个语法错误，点击可跳转</string>
 </resources>
