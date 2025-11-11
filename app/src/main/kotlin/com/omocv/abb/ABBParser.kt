@@ -233,6 +233,7 @@ class ABBParser {
             val lineNumber = index + 1
             val trimmed = line.trim()
             
+            // Skip empty lines and comments
             if (trimmed.isEmpty() || trimmed.startsWith("!")) {
                 return@forEachIndexed
             }
@@ -243,12 +244,7 @@ class ABBParser {
                     moduleCount++
                     blockStack.add(BlockInfo("MODULE", lineNumber))
                 }
-                // Check for malformed MODULE keywords
-                trimmed.matches(Regex("^MODUL[EL]?\\s+\\w+.*", RegexOption.IGNORE_CASE)) && 
-                !trimmed.matches(Regex("^MODULE\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
-                    errors.add(SyntaxError(lineNumber, "Invalid MODULE syntax - should be 'MODULE <name>'"))
-                }
-                trimmed.matches(Regex("^ENDMODULE\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^ENDMODULE\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     endModuleCount++
                     if (blockStack.isEmpty() || blockStack.last().type != "MODULE") {
                         errors.add(SyntaxError(lineNumber, "ENDMODULE without matching MODULE"))
@@ -256,83 +252,48 @@ class ABBParser {
                         blockStack.removeAt(blockStack.size - 1)
                     }
                 }
-                // Check for malformed ENDMODULE keywords
-                trimmed.matches(Regex("^ENDMODUL[EL]?\\s*$", RegexOption.IGNORE_CASE)) && 
-                !trimmed.matches(Regex("^ENDMODULE\\s*$", RegexOption.IGNORE_CASE)) -> {
-                    errors.add(SyntaxError(lineNumber, "Invalid ENDMODULE syntax - should be 'ENDMODULE'"))
-                }
                 
                 // Check PROC/ENDPROC matching
                 trimmed.matches(Regex("^PROC\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("PROC", lineNumber))
                 }
-                // Check for malformed PROC keywords
-                trimmed.matches(Regex("^PRO[C]?\\s+\\w+.*", RegexOption.IGNORE_CASE)) && 
-                !trimmed.matches(Regex("^PROC\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
-                    errors.add(SyntaxError(lineNumber, "Invalid PROC syntax - should be 'PROC <name>'"))
-                }
-                trimmed.matches(Regex("^ENDPROC\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^ENDPROC\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "PROC") {
                         errors.add(SyntaxError(lineNumber, "ENDPROC without matching PROC"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
                 }
-                // Check for malformed ENDPROC keywords
-                trimmed.matches(Regex("^ENDPRO[C]?\\s*$", RegexOption.IGNORE_CASE)) && 
-                !trimmed.matches(Regex("^ENDPROC\\s*$", RegexOption.IGNORE_CASE)) -> {
-                    errors.add(SyntaxError(lineNumber, "Invalid ENDPROC syntax - should be 'ENDPROC'"))
-                }
                 
                 // Check FUNC/ENDFUNC matching
                 trimmed.matches(Regex("^FUNC\\s+\\w+\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("FUNC", lineNumber))
                 }
-                // Check for malformed FUNC keywords
-                trimmed.matches(Regex("^FUN[C]?\\s+\\w+.*", RegexOption.IGNORE_CASE)) && 
-                !trimmed.matches(Regex("^FUNC\\s+\\w+\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
-                    errors.add(SyntaxError(lineNumber, "Invalid FUNC syntax - should be 'FUNC <returnType> <name>'"))
-                }
-                trimmed.matches(Regex("^ENDFUNC\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^ENDFUNC\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "FUNC") {
                         errors.add(SyntaxError(lineNumber, "ENDFUNC without matching FUNC"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
                 }
-                // Check for malformed ENDFUNC keywords
-                trimmed.matches(Regex("^ENDFUN[C]?\\s*$", RegexOption.IGNORE_CASE)) && 
-                !trimmed.matches(Regex("^ENDFUNC\\s*$", RegexOption.IGNORE_CASE)) -> {
-                    errors.add(SyntaxError(lineNumber, "Invalid ENDFUNC syntax - should be 'ENDFUNC'"))
-                }
                 
                 // Check TRAP/ENDTRAP matching
                 trimmed.matches(Regex("^TRAP\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("TRAP", lineNumber))
                 }
-                // Check for malformed TRAP keywords
-                trimmed.matches(Regex("^TRA[P]?\\s+\\w+.*", RegexOption.IGNORE_CASE)) && 
-                !trimmed.matches(Regex("^TRAP\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
-                    errors.add(SyntaxError(lineNumber, "Invalid TRAP syntax - should be 'TRAP <name>'"))
-                }
-                trimmed.matches(Regex("^ENDTRAP\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^ENDTRAP\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "TRAP") {
                         errors.add(SyntaxError(lineNumber, "ENDTRAP without matching TRAP"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
                 }
-                // Check for malformed ENDTRAP keywords
-                trimmed.matches(Regex("^ENDTRA[P]?\\s*$", RegexOption.IGNORE_CASE)) && 
-                !trimmed.matches(Regex("^ENDTRAP\\s*$", RegexOption.IGNORE_CASE)) -> {
-                    errors.add(SyntaxError(lineNumber, "Invalid ENDTRAP syntax - should be 'ENDTRAP'"))
-                }
                 
                 // Check IF/ENDIF matching
-                trimmed.matches(Regex("^IF\\s+.+\\s+THEN\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^IF\\s+.+\\s+THEN\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("IF", lineNumber))
                 }
-                trimmed.matches(Regex("^ENDIF\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^ENDIF\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "IF") {
                         errors.add(SyntaxError(lineNumber, "ENDIF without matching IF"))
                     } else {
@@ -341,10 +302,10 @@ class ABBParser {
                 }
                 
                 // Check FOR/ENDFOR matching
-                trimmed.matches(Regex("^FOR\\s+.+\\s+FROM\\s+.+\\s+TO\\s+.+\\s+DO\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^FOR\\s+.+\\s+FROM\\s+.+\\s+TO\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("FOR", lineNumber))
                 }
-                trimmed.matches(Regex("^ENDFOR\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^ENDFOR\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "FOR") {
                         errors.add(SyntaxError(lineNumber, "ENDFOR without matching FOR"))
                     } else {
@@ -353,10 +314,10 @@ class ABBParser {
                 }
                 
                 // Check WHILE/ENDWHILE matching
-                trimmed.matches(Regex("^WHILE\\s+.+\\s+DO\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^WHILE\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("WHILE", lineNumber))
                 }
-                trimmed.matches(Regex("^ENDWHILE\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^ENDWHILE\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "WHILE") {
                         errors.add(SyntaxError(lineNumber, "ENDWHILE without matching WHILE"))
                     } else {
@@ -365,10 +326,10 @@ class ABBParser {
                 }
                 
                 // Check TEST/ENDTEST matching
-                trimmed.matches(Regex("^TEST\\s+.+$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^TEST\\s+.+", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("TEST", lineNumber))
                 }
-                trimmed.matches(Regex("^ENDTEST\\s*$", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^ENDTEST\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "TEST") {
                         errors.add(SyntaxError(lineNumber, "ENDTEST without matching TEST"))
                     } else {
@@ -377,14 +338,21 @@ class ABBParser {
                 }
             }
             
-            // Check for invalid syntax patterns
+            // Check for invalid syntax patterns (but be lenient)
             if (trimmed.contains(":=")) {
                 // Check assignment statement has valid variable name
                 val parts = trimmed.split(":=")
                 if (parts.size >= 2) {
-                    val varName = parts[0].trim().split(Regex("\\s+")).last()
-                    if (!varName.matches(Regex("^[a-zA-Z_][a-zA-Z0-9_]*$"))) {
-                        errors.add(SyntaxError(lineNumber, "Invalid variable name: $varName"))
+                    val varPart = parts[0].trim()
+                    // Get the last token which should be the variable name
+                    val tokens = varPart.split(Regex("\\s+"))
+                    if (tokens.isNotEmpty()) {
+                        val varName = tokens.last()
+                        // Allow array access, field access, but check basic variable pattern
+                        val cleanVarName = varName.split(Regex("[.\\[{]")).first()
+                        if (cleanVarName.isNotEmpty() && !cleanVarName.matches(Regex("^[a-zA-Z_][a-zA-Z0-9_]*$"))) {
+                            errors.add(SyntaxError(lineNumber, "Invalid variable name: $cleanVarName"))
+                        }
                     }
                 }
             }
