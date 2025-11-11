@@ -94,6 +94,7 @@
     <string name="select_all">Select All</string>
     <string name="deselect_all">Deselect All</string>
     <string name="no_routines_selected">No routines selected</string>
+    <string name="no_routines_found">No routines found in current file</string>
     <string name="routines_selected">%d routines selected</string>
     <string name="jump_to_error">Click to jump to error location</string>
     <string name="syntax_errors_found">Found %d syntax errors, click to jump</string>

@@ -239,6 +239,11 @@ class ABBParser {
                     moduleCount++
                     blockStack.add(BlockInfo("MODULE", lineNumber))
                 }
+                // Check for malformed MODULE keywords
+                trimmed.matches(Regex("^MODUL[EL]?\\s+\\w+.*", RegexOption.IGNORE_CASE)) && 
+                !trimmed.matches(Regex("^MODULE\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                    errors.add(SyntaxError(lineNumber, "Invalid MODULE syntax - should be 'MODULE <name>'"))
+                }
                 trimmed.matches(Regex("^ENDMODULE\\s*$", RegexOption.IGNORE_CASE)) -> {
                     endModuleCount++
                     if (blockStack.isEmpty() || blockStack.last().type != "MODULE") {
@@ -247,10 +252,20 @@ class ABBParser {
                         blockStack.removeAt(blockStack.size - 1)
                     }
                 }
+                // Check for malformed ENDMODULE keywords
+                trimmed.matches(Regex("^ENDMODUL[EL]?\\s*$", RegexOption.IGNORE_CASE)) && 
+                !trimmed.matches(Regex("^ENDMODULE\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    errors.add(SyntaxError(lineNumber, "Invalid ENDMODULE syntax - should be 'ENDMODULE'"))
+                }
                 
                 // Check PROC/ENDPROC matching
                 trimmed.matches(Regex("^PROC\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("PROC", lineNumber))
+                }
+                // Check for malformed PROC keywords
+                trimmed.matches(Regex("^PRO[C]?\\s+\\w+.*", RegexOption.IGNORE_CASE)) && 
+                !trimmed.matches(Regex("^PROC\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                    errors.add(SyntaxError(lineNumber, "Invalid PROC syntax - should be 'PROC <name>'"))
                 }
                 trimmed.matches(Regex("^ENDPROC\\s*$", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "PROC") {
@@ -259,10 +274,20 @@ class ABBParser {
                         blockStack.removeAt(blockStack.size - 1)
                     }
                 }
+                // Check for malformed ENDPROC keywords
+                trimmed.matches(Regex("^ENDPRO[C]?\\s*$", RegexOption.IGNORE_CASE)) && 
+                !trimmed.matches(Regex("^ENDPROC\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    errors.add(SyntaxError(lineNumber, "Invalid ENDPROC syntax - should be 'ENDPROC'"))
+                }
                 
                 // Check FUNC/ENDFUNC matching
                 trimmed.matches(Regex("^FUNC\\s+\\w+\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("FUNC", lineNumber))
+                }
+                // Check for malformed FUNC keywords
+                trimmed.matches(Regex("^FUN[C]?\\s+\\w+.*", RegexOption.IGNORE_CASE)) && 
+                !trimmed.matches(Regex("^FUNC\\s+\\w+\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                    errors.add(SyntaxError(lineNumber, "Invalid FUNC syntax - should be 'FUNC <returnType> <name>'"))
                 }
                 trimmed.matches(Regex("^ENDFUNC\\s*$", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "FUNC") {
@@ -271,10 +296,20 @@ class ABBParser {
                         blockStack.removeAt(blockStack.size - 1)
                     }
                 }
+                // Check for malformed ENDFUNC keywords
+                trimmed.matches(Regex("^ENDFUN[C]?\\s*$", RegexOption.IGNORE_CASE)) && 
+                !trimmed.matches(Regex("^ENDFUNC\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    errors.add(SyntaxError(lineNumber, "Invalid ENDFUNC syntax - should be 'ENDFUNC'"))
+                }
                 
                 // Check TRAP/ENDTRAP matching
                 trimmed.matches(Regex("^TRAP\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("TRAP", lineNumber))
+                }
+                // Check for malformed TRAP keywords
+                trimmed.matches(Regex("^TRA[P]?\\s+\\w+.*", RegexOption.IGNORE_CASE)) && 
+                !trimmed.matches(Regex("^TRAP\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                    errors.add(SyntaxError(lineNumber, "Invalid TRAP syntax - should be 'TRAP <name>'"))
                 }
                 trimmed.matches(Regex("^ENDTRAP\\s*$", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "TRAP") {
@@ -282,6 +317,11 @@ class ABBParser {
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
+                }
+                // Check for malformed ENDTRAP keywords
+                trimmed.matches(Regex("^ENDTRA[P]?\\s*$", RegexOption.IGNORE_CASE)) && 
+                !trimmed.matches(Regex("^ENDTRAP\\s*$", RegexOption.IGNORE_CASE)) -> {
+                    errors.add(SyntaxError(lineNumber, "Invalid ENDTRAP syntax - should be 'ENDTRAP'"))
                 }
                 
                 // Check IF/ENDIF matching

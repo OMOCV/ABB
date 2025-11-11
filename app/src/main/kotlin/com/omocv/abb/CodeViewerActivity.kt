@@ -46,6 +46,7 @@ class CodeViewerActivity : AppCompatActivity() {
     private var hasUnsavedChanges = false
     private var currentProgramFile: ABBProgramFile? = null
     private var isScrollSyncing = false  // Flag to prevent infinite scroll loop
+    private var currentHighlightedLine: Int = -1  // Track currently highlighted line
     
     companion object {
         private const val EXTRA_FILE_NAME = "file_name"
@@ -375,10 +376,21 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun showRoutineSelectionDialog(searchText: String, replaceText: String) {
-        val routines = currentProgramFile?.routines ?: emptyList()
+        // Re-parse the current content to get the most up-to-date routines
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val routines = try {
+            val tempFile = java.io.File(cacheDir, "_temp_parse_${System.currentTimeMillis()}.mod")
+            tempFile.writeText(content)
+            val parsedFile = abbParser.parseFile(tempFile)
+            tempFile.delete()
+            parsedFile.routines
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error parsing routines", e)
+            currentProgramFile?.routines ?: emptyList()
+        }
         
         if (routines.isEmpty()) {
-            Toast.makeText(this, getString(R.string.no_routines_selected), Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.no_routines_found), Toast.LENGTH_SHORT).show()
             replaceCode(searchText, replaceText, "all", null)
             return
         }
@@ -565,11 +577,14 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun highlightLine(lineNumber: Int) {
-        // Temporarily highlight the target line by adding a background color
+        // Highlight the target line persistently by adding a background color
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val lines = content.lines()
         
         if (lineNumber > 0 && lineNumber <= lines.size) {
+            // Store the currently highlighted line
+            currentHighlightedLine = lineNumber
+            
             // Calculate character positions for the line
             var startPos = 0
             for (i in 0 until lineNumber - 1) {
@@ -605,11 +620,19 @@ class CodeViewerActivity : AppCompatActivity() {
                 )
                 tvCodeContent.text = finalSpannable
                 
-                // Remove highlight after 2 seconds
-                tvCodeContent.postDelayed({
-                    displayContent()
-                }, 2000)
+                // Set up click listener to clear highlight when user clicks on the code
+                tvCodeContent.setOnClickListener {
+                    clearHighlight()
+                }
             }
+        }
+    }
+    
+    private fun clearHighlight() {
+        if (currentHighlightedLine != -1) {
+            currentHighlightedLine = -1
+            tvCodeContent.setOnClickListener(null)
+            displayContent()
         }
     }
 
