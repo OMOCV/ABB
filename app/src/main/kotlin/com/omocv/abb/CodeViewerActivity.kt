@@ -45,6 +45,7 @@ class CodeViewerActivity : AppCompatActivity() {
     private var isEditMode = false
     private var hasUnsavedChanges = false
     private var currentProgramFile: ABBProgramFile? = null
+    private var isScrollSyncing = false  // Flag to prevent infinite scroll loop
     
     companion object {
         private const val EXTRA_FILE_NAME = "file_name"
@@ -134,24 +135,21 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun setupScrollSynchronization() {
-        // Variable to prevent infinite loop
-        var isScrolling = false
-        
         // Listen to code content scroll changes
         scrollViewCode.viewTreeObserver.addOnScrollChangedListener {
-            if (!isScrolling) {
-                isScrolling = true
+            if (!isScrollSyncing) {
+                isScrollSyncing = true
                 scrollViewLineNumbers.scrollTo(0, scrollViewCode.scrollY)
-                isScrolling = false
+                isScrollSyncing = false
             }
         }
         
         // Listen to line numbers scroll changes
         scrollViewLineNumbers.viewTreeObserver.addOnScrollChangedListener {
-            if (!isScrolling) {
-                isScrolling = true
+            if (!isScrollSyncing) {
+                isScrollSyncing = true
                 scrollViewCode.scrollTo(0, scrollViewLineNumbers.scrollY)
-                isScrolling = false
+                isScrollSyncing = false
             }
         }
     }
