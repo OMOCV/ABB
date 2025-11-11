@@ -108,4 +108,5 @@
     <string name="file_save_failed">文件保存失败</string>
     <string name="save_options">保存选项</string>
     <string name="save_confirmation">您要覆盖原文件还是另存为新文件？</string>
+    <string name="permission_denied_try_save_as">权限被拒绝。请尝试"另存为新文件"</string>
 </resources>

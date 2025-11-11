@@ -247,7 +247,7 @@ class ABBParser {
                 trimmed.matches(Regex("^ENDMODULE\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     endModuleCount++
                     if (blockStack.isEmpty() || blockStack.last().type != "MODULE") {
-                        errors.add(SyntaxError(lineNumber, "ENDMODULE without matching MODULE"))
+                        errors.add(SyntaxError(lineNumber, "ENDMODULE without matching MODULE at line $lineNumber"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -259,7 +259,7 @@ class ABBParser {
                 }
                 trimmed.matches(Regex("^ENDPROC\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "PROC") {
-                        errors.add(SyntaxError(lineNumber, "ENDPROC without matching PROC"))
+                        errors.add(SyntaxError(lineNumber, "ENDPROC at line $lineNumber without matching PROC"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -271,7 +271,7 @@ class ABBParser {
                 }
                 trimmed.matches(Regex("^ENDFUNC\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "FUNC") {
-                        errors.add(SyntaxError(lineNumber, "ENDFUNC without matching FUNC"))
+                        errors.add(SyntaxError(lineNumber, "ENDFUNC at line $lineNumber without matching FUNC"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -283,7 +283,7 @@ class ABBParser {
                 }
                 trimmed.matches(Regex("^ENDTRAP\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "TRAP") {
-                        errors.add(SyntaxError(lineNumber, "ENDTRAP without matching TRAP"))
+                        errors.add(SyntaxError(lineNumber, "ENDTRAP at line $lineNumber without matching TRAP"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -295,19 +295,19 @@ class ABBParser {
                 }
                 trimmed.matches(Regex("^ENDIF\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "IF") {
-                        errors.add(SyntaxError(lineNumber, "ENDIF without matching IF"))
+                        errors.add(SyntaxError(lineNumber, "ENDIF at line $lineNumber without matching IF"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
                 }
                 
                 // Check FOR/ENDFOR matching
-                trimmed.matches(Regex("^FOR\\s+.+\\s+FROM\\s+.+\\s+TO\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                trimmed.matches(Regex("^FOR\\s+.+\\s+(FROM\\s+.+\\s+)?TO\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     blockStack.add(BlockInfo("FOR", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDFOR\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "FOR") {
-                        errors.add(SyntaxError(lineNumber, "ENDFOR without matching FOR"))
+                        errors.add(SyntaxError(lineNumber, "ENDFOR at line $lineNumber without matching FOR"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -319,7 +319,7 @@ class ABBParser {
                 }
                 trimmed.matches(Regex("^ENDWHILE\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "WHILE") {
-                        errors.add(SyntaxError(lineNumber, "ENDWHILE without matching WHILE"))
+                        errors.add(SyntaxError(lineNumber, "ENDWHILE at line $lineNumber without matching WHILE"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -331,7 +331,7 @@ class ABBParser {
                 }
                 trimmed.matches(Regex("^ENDTEST\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     if (blockStack.isEmpty() || blockStack.last().type != "TEST") {
-                        errors.add(SyntaxError(lineNumber, "ENDTEST without matching TEST"))
+                        errors.add(SyntaxError(lineNumber, "ENDTEST at line $lineNumber without matching TEST"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -351,16 +351,16 @@ class ABBParser {
                         // Allow array access, field access, but check basic variable pattern
                         val cleanVarName = varName.split(Regex("[.\\[{]")).first()
                         if (cleanVarName.isNotEmpty() && !cleanVarName.matches(Regex("^[a-zA-Z_][a-zA-Z0-9_]*$"))) {
-                            errors.add(SyntaxError(lineNumber, "Invalid variable name: $cleanVarName"))
+                            errors.add(SyntaxError(lineNumber, "Invalid variable name '$cleanVarName' at line $lineNumber"))
                         }
                     }
                 }
             }
         }
         
-        // Check for unclosed blocks
+        // Check for unclosed blocks - report with specific line numbers
         blockStack.forEach { block ->
-            errors.add(SyntaxError(block.lineNumber, "Unclosed ${block.type} block - missing END${block.type}"))
+            errors.add(SyntaxError(block.lineNumber, "Unclosed ${block.type} block starting at line ${block.lineNumber} - missing END${block.type}"))
         }
         
         return errors

@@ -40,10 +40,22 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
         // Save cursor position
         val cursorPosition = selectionStart
         
-        // Remove all existing spans to avoid conflicts
+        // Save any BackgroundColorSpan (used for highlighting search results and errors)
+        val backgroundSpans = editable.getSpans(0, editable.length, android.text.style.BackgroundColorSpan::class.java)
+        val savedSpans = backgroundSpans.map { span ->
+            Triple(
+                span,
+                editable.getSpanStart(span),
+                editable.getSpanEnd(span)
+            )
+        }
+        
+        // Remove all existing spans except BackgroundColorSpan
         val spans = editable.getSpans(0, editable.length, Object::class.java)
         for (span in spans) {
-            editable.removeSpan(span)
+            if (span !is android.text.style.BackgroundColorSpan) {
+                editable.removeSpan(span)
+            }
         }
         
         // Apply new syntax highlighting
