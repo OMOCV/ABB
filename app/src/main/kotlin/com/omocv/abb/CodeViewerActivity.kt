@@ -136,33 +136,26 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun setupScrollSynchronization() {
-        // Listen to code content scroll changes
-        scrollViewCode.viewTreeObserver.addOnScrollChangedListener {
-            if (!isScrollSyncing) {
+        // Remove any existing listeners to prevent duplicates
+        scrollViewCode.setOnScrollChangeListener(null)
+        scrollViewLineNumbers.setOnScrollChangeListener(null)
+        
+        // Synchronize line numbers with code content scrolling
+        scrollViewCode.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            if (!isScrollSyncing && scrollY != oldScrollY) {
                 isScrollSyncing = true
-                scrollViewLineNumbers.scrollTo(0, scrollViewCode.scrollY)
+                scrollViewLineNumbers.scrollTo(0, scrollY)
                 isScrollSyncing = false
             }
         }
         
-        // Listen to line numbers scroll changes
-        scrollViewLineNumbers.viewTreeObserver.addOnScrollChangedListener {
-            if (!isScrollSyncing) {
+        // Synchronize code content with line numbers scrolling
+        scrollViewLineNumbers.setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
+            if (!isScrollSyncing && scrollY != oldScrollY) {
                 isScrollSyncing = true
-                scrollViewCode.scrollTo(0, scrollViewLineNumbers.scrollY)
+                scrollViewCode.scrollTo(0, scrollY)
                 isScrollSyncing = false
             }
-        }
-        
-        // Add touch listeners to ensure scrolling works both ways
-        scrollViewCode.setOnTouchListener { _, event ->
-            // Forward touch events to trigger scroll synchronization
-            false // Don't consume the event, let normal scrolling happen
-        }
-        
-        scrollViewLineNumbers.setOnTouchListener { _, event ->
-            // Forward touch events to trigger scroll synchronization
-            false // Don't consume the event, let normal scrolling happen
         }
     }
     
