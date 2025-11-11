@@ -483,7 +483,7 @@ class CodeViewerActivity : AppCompatActivity() {
             
             if (isEditMode) {
                 // Set cursor to the line in edit mode
-                etCodeContent.setSelection(charPosition.coerceAtMost(etCodeContent.text.length))
+                etCodeContent.setSelection(charPosition.coerceAtMost(etCodeContent.text?.length ?: 0))
                 etCodeContent.requestFocus()
             }
             
