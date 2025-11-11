@@ -152,6 +152,17 @@ class CodeViewerActivity : AppCompatActivity() {
                 isScrollSyncing = false
             }
         }
+        
+        // Add touch listeners to ensure scrolling works both ways
+        scrollViewCode.setOnTouchListener { _, event ->
+            // Forward touch events to trigger scroll synchronization
+            false // Don't consume the event, let normal scrolling happen
+        }
+        
+        scrollViewLineNumbers.setOnTouchListener { _, event ->
+            // Forward touch events to trigger scroll synchronization
+            false // Don't consume the event, let normal scrolling happen
+        }
     }
     
     private fun handleBackPressed() {
@@ -526,9 +537,79 @@ class CodeViewerActivity : AppCompatActivity() {
                 // Set cursor to the line in edit mode
                 etCodeContent.setSelection(charPosition.coerceAtMost(etCodeContent.text?.length ?: 0))
                 etCodeContent.requestFocus()
+                
+                // Scroll to make the cursor visible
+                etCodeContent.post {
+                    val layout = etCodeContent.layout
+                    if (layout != null) {
+                        val lineTop = layout.getLineTop(lineNumber - 1)
+                        scrollViewCode.smoothScrollTo(0, lineTop)
+                    }
+                }
+            } else {
+                // Calculate the Y position of the line in view mode
+                tvCodeContent.post {
+                    val layout = tvCodeContent.layout
+                    if (layout != null && lineNumber - 1 < layout.lineCount) {
+                        val lineTop = layout.getLineTop(lineNumber - 1)
+                        scrollViewCode.smoothScrollTo(0, lineTop)
+                        
+                        // Highlight the line temporarily
+                        highlightLine(lineNumber)
+                    }
+                }
             }
             
             Toast.makeText(this, getString(R.string.jumped_to_line, lineNumber), Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun highlightLine(lineNumber: Int) {
+        // Temporarily highlight the target line by adding a background color
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val lines = content.lines()
+        
+        if (lineNumber > 0 && lineNumber <= lines.size) {
+            // Calculate character positions for the line
+            var startPos = 0
+            for (i in 0 until lineNumber - 1) {
+                startPos += lines[i].length + 1
+            }
+            val endPos = startPos + lines[lineNumber - 1].length
+            
+            // Apply highlight to the line
+            val spannable = SpannableString(content)
+            val highlightColor = if (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES) {
+                Color.parseColor("#404040") // Dark gray for dark theme
+            } else {
+                Color.parseColor("#FFFF99") // Light yellow for light theme
+            }
+            
+            spannable.setSpan(
+                BackgroundColorSpan(highlightColor),
+                startPos,
+                endPos.coerceAtMost(content.length),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            
+            if (!isEditMode) {
+                // Apply syntax highlighting on top of the background highlight
+                val highlighted = syntaxHighlighter.highlight(spannable.toString())
+                // Reapply the background span to the highlighted text
+                val finalSpannable = SpannableString(highlighted)
+                finalSpannable.setSpan(
+                    BackgroundColorSpan(highlightColor),
+                    startPos,
+                    endPos.coerceAtMost(content.length),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                tvCodeContent.text = finalSpannable
+                
+                // Remove highlight after 2 seconds
+                tvCodeContent.postDelayed({
+                    displayContent()
+                }, 2000)
+            }
         }
     }
 
