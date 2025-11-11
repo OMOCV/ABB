@@ -46,9 +46,9 @@ class MainActivity : AppCompatActivity() {
 
     private var currentProgramFile: ABBProgramFile? = null
 
-    // File picker launcher
+    // File picker launcher - using OpenDocument for better permission support
     private val filePickerLauncher = registerForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.OpenDocument()
     ) { uri: Uri? ->
         uri?.let { handleSelectedFile(it) }
     }
@@ -159,7 +159,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun openFilePicker() {
         try {
-            filePickerLauncher.launch("*/*")
+            // Using array of MIME types for better compatibility
+            filePickerLauncher.launch(arrayOf("*/*"))
         } catch (e: Exception) {
             Toast.makeText(this, "无法打开文件选择器: ${e.message}", Toast.LENGTH_LONG).show()
         }
@@ -168,6 +169,19 @@ class MainActivity : AppCompatActivity() {
     private fun handleSelectedFile(uri: Uri) {
         try {
             currentFileUri = uri
+            
+            // Try to take persistable URI permissions for both read and write
+            // This allows us to save changes back to the file later
+            try {
+                val takeFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                contentResolver.takePersistableUriPermission(uri, takeFlags)
+                android.util.Log.d("MainActivity", "Successfully took persistable URI permissions")
+            } catch (e: SecurityException) {
+                // Permission might not be available for this URI
+                // This is not fatal - we can still read the file
+                android.util.Log.d("MainActivity", "Could not take persistable permission: ${e.message}")
+            }
+            
             // Read file from URI
             val inputStream = contentResolver.openInputStream(uri)
             val content = inputStream?.bufferedReader()?.use { it.readText() } ?: ""

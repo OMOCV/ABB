@@ -278,18 +278,69 @@ class CodeViewerActivity : AppCompatActivity() {
                 android.util.Log.d("CodeViewerActivity", "Could not take persistable permission: ${e.message}")
             }
             
-            // Use "wt" mode (write truncate) which is more reliable for text files
-            // If that fails, fall back to "w" mode
-            var outputStream = try {
-                contentResolver.openOutputStream(uri, "wt")
-            } catch (e: Exception) {
-                contentResolver.openOutputStream(uri, "w")
+            // First, check if we can write to this URI by checking permissions
+            val persistedUris = contentResolver.persistedUriPermissions
+            val hasWritePermission = persistedUris.any { 
+                it.uri == uri && it.isWritePermission 
             }
             
-            outputStream?.use { stream ->
+            if (!hasWritePermission) {
+                android.util.Log.w("CodeViewerActivity", "No write permission for URI, will try anyway")
+            }
+            
+            // Try multiple write modes for maximum compatibility
+            // Mode "wt" (write truncate) is most reliable for text files
+            // Mode "w" is a fallback
+            // Mode "wa" (write append) then truncate is another fallback
+            var outputStream: java.io.OutputStream? = null
+            var writeSuccess = false
+            
+            // Try mode "wt" first (write truncate - best for overwriting)
+            try {
+                outputStream = contentResolver.openOutputStream(uri, "wt")
+                if (outputStream != null) {
+                    android.util.Log.d("CodeViewerActivity", "Opened stream with mode 'wt'")
+                    writeSuccess = true
+                }
+            } catch (e: Exception) {
+                android.util.Log.w("CodeViewerActivity", "Mode 'wt' failed: ${e.message}")
+            }
+            
+            // Try mode "w" as fallback (write - may not truncate on all systems)
+            if (!writeSuccess) {
+                try {
+                    outputStream = contentResolver.openOutputStream(uri, "w")
+                    if (outputStream != null) {
+                        android.util.Log.d("CodeViewerActivity", "Opened stream with mode 'w'")
+                        writeSuccess = true
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("CodeViewerActivity", "Mode 'w' failed: ${e.message}")
+                }
+            }
+            
+            // Try default mode as last resort
+            if (!writeSuccess) {
+                try {
+                    outputStream = contentResolver.openOutputStream(uri)
+                    if (outputStream != null) {
+                        android.util.Log.d("CodeViewerActivity", "Opened stream with default mode")
+                        writeSuccess = true
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("CodeViewerActivity", "Default mode failed: ${e.message}")
+                }
+            }
+            
+            if (!writeSuccess || outputStream == null) {
+                throw Exception("Could not open output stream for URI. Try 'Save as new file' instead.")
+            }
+            
+            // Write the content
+            outputStream.use { stream ->
                 stream.write(content.toByteArray(Charsets.UTF_8))
                 stream.flush()
-            } ?: throw Exception("Could not open output stream for URI")
+            }
             
             originalContent = content
             hasUnsavedChanges = false
@@ -297,13 +348,25 @@ class CodeViewerActivity : AppCompatActivity() {
             displayContent()
         } catch (e: Exception) {
             android.util.Log.e("CodeViewerActivity", "Error saving file", e)
-            // Provide more specific error message
+            
+            // Provide more specific error message and offer to save as new file
             val errorMsg = when {
                 e.message?.contains("Permission denied") == true || e is SecurityException -> 
+                    getString(R.string.permission_denied_try_save_as)
+                e.message?.contains("Could not open output stream") == true ->
                     getString(R.string.file_save_failed) + ": " + getString(R.string.permission_denied_try_save_as)
                 else -> getString(R.string.file_save_failed) + ": ${e.message}"
             }
-            Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
+            
+            // Show error with option to save as new file
+            MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.file_save_failed))
+                .setMessage(errorMsg)
+                .setPositiveButton(getString(R.string.save_as_new_file)) { _, _ ->
+                    saveAsNewFile(content)
+                }
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show()
         }
     }
     
