@@ -30,6 +30,8 @@ import android.widget.RadioGroup
 class CodeViewerActivity : AppCompatActivity() {
 
     private lateinit var toolbar: MaterialToolbar
+    private lateinit var scrollViewLineNumbers: android.widget.ScrollView
+    private lateinit var scrollViewCode: android.widget.ScrollView
     private lateinit var tvLineNumbers: TextView
     private lateinit var tvCodeContent: TextView
     private lateinit var etCodeContent: SyntaxHighlightEditText
@@ -100,6 +102,8 @@ class CodeViewerActivity : AppCompatActivity() {
 
     private fun initViews() {
         toolbar = findViewById(R.id.toolbar)
+        scrollViewLineNumbers = findViewById(R.id.scrollViewLineNumbers)
+        scrollViewCode = findViewById(R.id.scrollViewCode)
         tvLineNumbers = findViewById(R.id.tvLineNumbers)
         tvCodeContent = findViewById(R.id.tvCodeContent)
         etCodeContent = findViewById(R.id.etCodeContent)
@@ -110,6 +114,32 @@ class CodeViewerActivity : AppCompatActivity() {
         
         toolbar.setNavigationOnClickListener {
             handleBackPressed()
+        }
+        
+        // Synchronize scrolling between line numbers and code content
+        setupScrollSynchronization()
+    }
+    
+    private fun setupScrollSynchronization() {
+        // Variable to prevent infinite loop
+        var isScrolling = false
+        
+        // Listen to code content scroll changes
+        scrollViewCode.viewTreeObserver.addOnScrollChangedListener {
+            if (!isScrolling) {
+                isScrolling = true
+                scrollViewLineNumbers.scrollTo(0, scrollViewCode.scrollY)
+                isScrolling = false
+            }
+        }
+        
+        // Listen to line numbers scroll changes
+        scrollViewLineNumbers.viewTreeObserver.addOnScrollChangedListener {
+            if (!isScrolling) {
+                isScrolling = true
+                scrollViewCode.scrollTo(0, scrollViewLineNumbers.scrollY)
+                isScrolling = false
+            }
         }
     }
     

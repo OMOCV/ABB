@@ -33,17 +33,25 @@
             android:layout_height="match_parent"
             android:orientation="horizontal">
 
-            <!-- Line numbers -->
-            <TextView
-                android:id="@+id/tvLineNumbers"
-                style="@style/CodeTextStyle"
+            <!-- Line numbers with scrolling -->
+            <ScrollView
+                android:id="@+id/scrollViewLineNumbers"
                 android:layout_width="wrap_content"
                 android:layout_height="match_parent"
-                android:background="#2C2C2C"
-                android:gravity="end"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:textColor="#999999" />
+                android:scrollbars="none">
+
+                <TextView
+                    android:id="@+id/tvLineNumbers"
+                    style="@style/CodeTextStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:background="#2C2C2C"
+                    android:gravity="end"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:textColor="#999999" />
+
+            </ScrollView>
 
             <!-- Code content - can be TextView or EditText based on mode -->
             <ScrollView
@@ -66,7 +74,7 @@
                         android:textColor="#E0E0E0"
                         android:visibility="visible" />
 
-                    <EditText
+                    <com.omocv.abb.SyntaxHighlightEditText
                         android:id="@+id/etCodeContent"
                         style="@style/CodeTextStyle"
                         android:layout_width="wrap_content"
