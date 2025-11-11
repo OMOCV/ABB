@@ -2,6 +2,7 @@ package com.omocv.abb
 
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -20,6 +21,7 @@ import android.text.TextWatcher
 import android.graphics.Color
 import android.text.SpannableString
 import android.text.style.BackgroundColorSpan
+import android.text.Spannable
 import android.text.Spanned
 import android.widget.RadioGroup
 
@@ -39,6 +41,7 @@ class CodeViewerActivity : AppCompatActivity() {
     private val syntaxHighlighter = ABBSyntaxHighlighter()
     private val abbParser = ABBParser()
     private lateinit var fileName: String
+    private var fileUri: String? = null
     private var fileContent: String = ""
     private var originalContent: String = ""
     private var currentSearchQuery = ""
@@ -48,18 +51,32 @@ class CodeViewerActivity : AppCompatActivity() {
     private var isScrollSyncing = false  // Flag to prevent infinite scroll loop
     private var currentHighlightedLine: Int = -1  // Track currently highlighted line
     
+    // File save launcher for save-as functionality
+    private val saveFileLauncher = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == RESULT_OK) {
+            result.data?.data?.let { uri ->
+                val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+                saveToUri(uri, content)
+            }
+        }
+    }
+    
     companion object {
         private const val EXTRA_FILE_NAME = "file_name"
         private const val EXTRA_FILE_CONTENT = "file_content"
+        private const val EXTRA_FILE_URI = "file_uri"
         private const val PREFS_NAME = "ABBPrefs"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_BOOKMARKS = "bookmarks_"
         private const val KEY_REAL_TIME_CHECK = "real_time_syntax_check"
         
-        fun newIntent(context: Context, fileName: String, fileContent: String): Intent {
+        fun newIntent(context: Context, fileName: String, fileContent: String, fileUri: String? = null): Intent {
             return Intent(context, CodeViewerActivity::class.java).apply {
                 putExtra(EXTRA_FILE_NAME, fileName)
                 putExtra(EXTRA_FILE_CONTENT, fileContent)
+                putExtra(EXTRA_FILE_URI, fileUri)
             }
         }
     }
@@ -86,6 +103,7 @@ class CodeViewerActivity : AppCompatActivity() {
         
         fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
         fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
+        fileUri = intent.getStringExtra(EXTRA_FILE_URI)
         originalContent = fileContent
         
         // Parse the file content to get routines info
@@ -229,12 +247,52 @@ class CodeViewerActivity : AppCompatActivity() {
         if (isEditMode) {
             fileContent = etCodeContent.text.toString()
         }
-        originalContent = fileContent
-        hasUnsavedChanges = false
-        Toast.makeText(this, getString(R.string.code_saved), Toast.LENGTH_SHORT).show()
         
-        // Update display
-        displayContent()
+        // Show save options dialog
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.save_options))
+            .setMessage(getString(R.string.save_confirmation))
+            .setPositiveButton(getString(R.string.overwrite_file)) { _, _ ->
+                if (fileUri != null) {
+                    saveToUri(Uri.parse(fileUri), fileContent)
+                } else {
+                    saveAsNewFile(fileContent)
+                }
+            }
+            .setNegativeButton(getString(R.string.save_as_new_file)) { _, _ ->
+                saveAsNewFile(fileContent)
+            }
+            .setNeutralButton(getString(R.string.cancel), null)
+            .show()
+    }
+    
+    private fun saveToUri(uri: Uri, content: String) {
+        try {
+            contentResolver.openOutputStream(uri, "wt")?.use { outputStream ->
+                outputStream.write(content.toByteArray())
+            }
+            originalContent = content
+            hasUnsavedChanges = false
+            Toast.makeText(this, getString(R.string.file_saved_successfully), Toast.LENGTH_SHORT).show()
+            displayContent()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error saving file", e)
+            Toast.makeText(this, getString(R.string.file_save_failed) + ": ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+    
+    private fun saveAsNewFile(content: String) {
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TITLE, fileName)
+        }
+        try {
+            saveFileLauncher.launch(intent)
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error launching save file picker", e)
+            Toast.makeText(this, getString(R.string.file_save_failed), Toast.LENGTH_SHORT).show()
+        }
     }
     
     private fun setupRealTimeSyntaxCheck() {
@@ -358,10 +416,14 @@ class CodeViewerActivity : AppCompatActivity() {
                             showRoutineSelectionDialog(searchText, replaceText)
                             return@setPositiveButton
                         }
-                        R.id.rbReplaceInModule -> "module"
+                        R.id.rbReplaceInModule -> {
+                            // Show module selection dialog
+                            showModuleSelectionDialog(searchText, replaceText)
+                            return@setPositiveButton
+                        }
                         else -> "all"
                     }
-                    replaceCode(searchText, replaceText, scope, null)
+                    replaceCode(searchText, replaceText, scope, null, null)
                 }
             }
             .setNegativeButton(getString(R.string.cancel), null)
@@ -384,7 +446,7 @@ class CodeViewerActivity : AppCompatActivity() {
         
         if (routines.isEmpty()) {
             Toast.makeText(this, getString(R.string.no_routines_found), Toast.LENGTH_SHORT).show()
-            replaceCode(searchText, replaceText, "all", null)
+            replaceCode(searchText, replaceText, "all", null, null)
             return
         }
         
@@ -413,14 +475,66 @@ class CodeViewerActivity : AppCompatActivity() {
                 if (selectedRoutines.isEmpty()) {
                     Toast.makeText(this, getString(R.string.no_routines_selected), Toast.LENGTH_SHORT).show()
                 } else {
-                    replaceCode(searchText, replaceText, "routine", selectedRoutines)
+                    replaceCode(searchText, replaceText, "routine", selectedRoutines, null)
                 }
             }
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
     
-    private fun replaceCode(searchText: String, replaceText: String, scope: String, selectedRoutines: List<ABBRoutine>?) {
+    private fun showModuleSelectionDialog(searchText: String, replaceText: String) {
+        // Re-parse the current content to get the most up-to-date modules
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val modules = try {
+            val tempFile = java.io.File(cacheDir, "_temp_parse_${System.currentTimeMillis()}.mod")
+            tempFile.writeText(content)
+            val parsedFile = abbParser.parseFile(tempFile)
+            tempFile.delete()
+            parsedFile.modules
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error parsing modules", e)
+            currentProgramFile?.modules ?: emptyList()
+        }
+        
+        if (modules.isEmpty()) {
+            Toast.makeText(this, getString(R.string.no_modules_found), Toast.LENGTH_SHORT).show()
+            replaceCode(searchText, replaceText, "all", null, null)
+            return
+        }
+        
+        val dialogView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
+        val rvRoutines = dialogView.findViewById<RecyclerView>(R.id.rvRoutines)
+        val btnSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
+        val btnDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
+        
+        rvRoutines.layoutManager = LinearLayoutManager(this)
+        val adapter = ModuleSelectionAdapter(modules)
+        rvRoutines.adapter = adapter
+        
+        btnSelectAll.setOnClickListener {
+            adapter.selectAll()
+        }
+        
+        btnDeselectAll.setOnClickListener {
+            adapter.deselectAll()
+        }
+        
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.select_modules))
+            .setView(dialogView)
+            .setPositiveButton(getString(R.string.replace)) { _, _ ->
+                val selectedModules = adapter.getSelectedModules()
+                if (selectedModules.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.no_modules_selected), Toast.LENGTH_SHORT).show()
+                } else {
+                    replaceCode(searchText, replaceText, "module", null, selectedModules)
+                }
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
+            .show()
+    }
+    
+    private fun replaceCode(searchText: String, replaceText: String, scope: String, selectedRoutines: List<ABBRoutine>?, selectedModules: List<ABBModule>?) {
         var content = if (isEditMode) etCodeContent.text.toString() else fileContent
         var count = 0
         
@@ -453,10 +567,25 @@ class CodeViewerActivity : AppCompatActivity() {
                 }
             }
             "module" -> {
-                // Replace in current module (simplified - replaces in visible content)
-                val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
-                count = regex.findAll(content).count()
-                content = content.replace(searchText, replaceText, ignoreCase = true)
+                // Replace only in selected modules
+                if (selectedModules != null && selectedModules.isNotEmpty()) {
+                    val lines = content.lines().toMutableList()
+                    
+                    for (module in selectedModules) {
+                        for (lineIdx in module.startLine..module.endLine.coerceAtMost(lines.size - 1)) {
+                            if (lineIdx < lines.size) {
+                                val line = lines[lineIdx]
+                                if (line.contains(searchText, ignoreCase = true)) {
+                                    val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
+                                    count += regex.findAll(line).count()
+                                    lines[lineIdx] = line.replace(searchText, replaceText, ignoreCase = true)
+                                }
+                            }
+                        }
+                    }
+                    
+                    content = lines.joinToString("\n")
+                }
             }
         }
         
@@ -543,10 +672,13 @@ class CodeViewerActivity : AppCompatActivity() {
                 etCodeContent.setSelection(charPosition.coerceAtMost(etCodeContent.text?.length ?: 0))
                 etCodeContent.requestFocus()
                 
+                // Highlight the line in edit mode
+                highlightLineInEditMode(lineNumber)
+                
                 // Scroll to make the cursor visible
                 etCodeContent.post {
                     val layout = etCodeContent.layout
-                    if (layout != null) {
+                    if (layout != null && lineNumber - 1 < layout.lineCount) {
                         val lineTop = layout.getLineTop(lineNumber - 1)
                         scrollViewCode.smoothScrollTo(0, lineTop)
                     }
@@ -566,6 +698,46 @@ class CodeViewerActivity : AppCompatActivity() {
             }
             
             Toast.makeText(this, getString(R.string.jumped_to_line, lineNumber), Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    private fun highlightLineInEditMode(lineNumber: Int) {
+        // Highlight the target line in edit mode by adding a background color span
+        val content = etCodeContent.text
+        if (content != null && content is Spannable) {
+            val lines = content.toString().lines()
+            
+            if (lineNumber > 0 && lineNumber <= lines.size) {
+                // Store the currently highlighted line
+                currentHighlightedLine = lineNumber
+                
+                // Calculate character positions for the line
+                var startPos = 0
+                for (i in 0 until lineNumber - 1) {
+                    startPos += lines[i].length + 1
+                }
+                val endPos = startPos + lines[lineNumber - 1].length
+                
+                val highlightColor = if (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES) {
+                    Color.parseColor("#404040") // Dark gray for dark theme
+                } else {
+                    Color.parseColor("#FFFF99") // Light yellow for light theme
+                }
+                
+                // Remove any existing highlight spans
+                val existingSpans = content.getSpans(0, content.length, BackgroundColorSpan::class.java)
+                for (span in existingSpans) {
+                    content.removeSpan(span)
+                }
+                
+                // Apply new highlight span
+                content.setSpan(
+                    BackgroundColorSpan(highlightColor),
+                    startPos,
+                    endPos.coerceAtMost(content.length),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
         }
     }
     
