@@ -62,6 +62,7 @@ class ABBParser {
         
         var currentModule: String? = null
         var moduleType = ""
+        var moduleStartLine = 0
         var moduleRoutines = mutableListOf<ABBRoutine>()
         var moduleVariables = mutableListOf<String>()
 
@@ -78,6 +79,7 @@ class ABBParser {
                     } else {
                         "NOSTEPIN"
                     }
+                    moduleStartLine = index
                     moduleRoutines.clear()
                     moduleVariables.clear()
                 }
@@ -91,7 +93,9 @@ class ABBParser {
                             name = currentModule,
                             type = moduleType,
                             routines = moduleRoutines.toList(),
-                            variables = moduleVariables.toList()
+                            variables = moduleVariables.toList(),
+                            startLine = moduleStartLine,
+                            endLine = index
                         )
                     )
                     currentModule = null
@@ -388,7 +392,7 @@ class ABBParser {
         
         // Check for unclosed blocks
         blockStack.forEach { block ->
-            errors.add(SyntaxError(block.lineNumber, "Unclosed ${block.type} block"))
+            errors.add(SyntaxError(block.lineNumber, "Unclosed ${block.type} block - missing END${block.type}"))
         }
         
         return errors

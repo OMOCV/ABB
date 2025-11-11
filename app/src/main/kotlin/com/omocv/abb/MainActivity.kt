@@ -283,7 +283,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun openCodeViewer(fileName: String, content: String) {
         try {
-            val intent = CodeViewerActivity.newIntent(this, fileName, content)
+            val intent = CodeViewerActivity.newIntent(this, fileName, content, currentFileUri?.toString())
             startActivity(intent)
         } catch (e: Exception) {
             android.util.Log.e("MainActivity", "Error opening code viewer", e)

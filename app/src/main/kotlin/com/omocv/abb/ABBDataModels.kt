@@ -7,7 +7,9 @@ data class ABBModule(
     val name: String,
     val type: String,
     val routines: List<ABBRoutine> = emptyList(),
-    val variables: List<String> = emptyList()
+    val variables: List<String> = emptyList(),
+    val startLine: Int = 0,
+    val endLine: Int = 0
 )
 
 /**
