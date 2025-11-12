@@ -1161,16 +1161,29 @@ class CodeViewerActivity : AppCompatActivity() {
             return
         }
         
-        val items = bookmarks.sorted().map { getString(R.string.line_number, it) }.toTypedArray()
-        
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.bookmarks))
-            .setItems(items) { _, which ->
-                val lineNumber = bookmarks.sorted()[which].toInt()
-                jumpToLine(lineNumber)
-            }
-            .setNegativeButton(getString(R.string.close), null)
-            .show()
+        try {
+            val items = bookmarks.sorted().map { getString(R.string.line_number, it) }.toTypedArray()
+            
+            MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.bookmarks))
+                .setItems(items) { _, which ->
+                    try {
+                        val sortedBookmarks = bookmarks.sorted()
+                        if (which >= 0 && which < sortedBookmarks.size) {
+                            val lineNumber = sortedBookmarks[which].toInt()
+                            jumpToLine(lineNumber)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("CodeViewerActivity", "Error navigating to bookmark", e)
+                        Toast.makeText(this, "跳转失败", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton(getString(R.string.close), null)
+                .show()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error showing bookmarks", e)
+            Toast.makeText(this, "显示书签失败", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun formatCode() {
