@@ -1034,7 +1034,8 @@ class CodeViewerActivity : AppCompatActivity() {
                 // Apply syntax highlighting first in view mode
                 val highlighted = syntaxHighlighter.highlight(content)
                 // Then add the full-line background span to the highlighted text
-                val finalSpannable = SpannableString(highlighted)
+                // Use SpannableStringBuilder to preserve existing spans from syntax highlighting
+                val finalSpannable = android.text.SpannableStringBuilder(highlighted)
                 if (finalSpannable.length >= endPos) {
                     finalSpannable.setSpan(
                         android.text.style.LineBackgroundSpan.Standard(highlightColor),
