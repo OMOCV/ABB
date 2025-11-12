@@ -52,12 +52,20 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
             val backgroundColorSpans = editable.getSpans(0, editable.length, android.text.style.BackgroundColorSpan::class.java)
             val savedBackgroundColorSpans = backgroundColorSpans.mapNotNull { span ->
                 try {
-                    // Extract the color from the span to create a new one later
-                    Triple(
-                        (span as android.text.style.BackgroundColorSpan).backgroundColor,
-                        editable.getSpanStart(span),
-                        editable.getSpanEnd(span)
-                    )
+                    val start = editable.getSpanStart(span)
+                    val end = editable.getSpanEnd(span)
+                    // Validate span positions before saving
+                    if (start >= 0 && end >= start && end <= editable.length) {
+                        // Extract the color from the span to create a new one later
+                        Triple(
+                            (span as android.text.style.BackgroundColorSpan).backgroundColor,
+                            start,
+                            end
+                        )
+                    } else {
+                        android.util.Log.w("SyntaxHighlightEditText", "Invalid BackgroundColorSpan positions: start=$start, end=$end, length=${editable.length}")
+                        null
+                    }
                 } catch (e: Exception) {
                     android.util.Log.w("SyntaxHighlightEditText", "Error saving BackgroundColorSpan", e)
                     null
@@ -68,12 +76,20 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
             val lineBackgroundSpans = editable.getSpans(0, editable.length, android.text.style.LineBackgroundSpan.Standard::class.java)
             val savedLineBackgroundSpans = lineBackgroundSpans.mapNotNull { span ->
                 try {
-                    // Extract the color from the span to create a new one later
-                    Triple(
-                        (span as android.text.style.LineBackgroundSpan.Standard).color,
-                        editable.getSpanStart(span),
-                        editable.getSpanEnd(span)
-                    )
+                    val start = editable.getSpanStart(span)
+                    val end = editable.getSpanEnd(span)
+                    // Validate span positions before saving
+                    if (start >= 0 && end >= start && end <= editable.length) {
+                        // Extract the color from the span to create a new one later
+                        Triple(
+                            (span as android.text.style.LineBackgroundSpan.Standard).color,
+                            start,
+                            end
+                        )
+                    } else {
+                        android.util.Log.w("SyntaxHighlightEditText", "Invalid LineBackgroundSpan positions: start=$start, end=$end, length=${editable.length}")
+                        null
+                    }
                 } catch (e: Exception) {
                     android.util.Log.w("SyntaxHighlightEditText", "Error saving LineBackgroundSpan", e)
                     null
@@ -110,15 +126,22 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
             
             // Restore saved BackgroundColorSpan (for highlighting search results and errors)
             // Create NEW spans with the saved color values instead of reusing the old span objects
-            for ((color, start, end) in savedBackgroundColorSpans) {
+            for ((color, savedStart, savedEnd) in savedBackgroundColorSpans) {
                 try {
-                    if (start >= 0 && end >= start && end <= editable.length) {
+                    // Clamp positions to the current text length to prevent crashes when text has changed
+                    val start = savedStart.coerceIn(0, editable.length)
+                    val end = savedEnd.coerceIn(start, editable.length)
+                    
+                    // Only apply span if it has valid range
+                    if (start < end && end <= editable.length) {
                         editable.setSpan(
                             android.text.style.BackgroundColorSpan(color),
                             start,
                             end,
                             android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                         )
+                    } else {
+                        android.util.Log.w("SyntaxHighlightEditText", "Skipping invalid BackgroundColorSpan range: start=$start, end=$end, length=${editable.length}")
                     }
                 } catch (e: Exception) {
                     android.util.Log.w("SyntaxHighlightEditText", "Error restoring BackgroundColorSpan", e)
@@ -127,15 +150,22 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
             
             // Restore saved LineBackgroundSpan.Standard (for full-line highlighting)
             // Create NEW spans with the saved color values instead of reusing the old span objects
-            for ((color, start, end) in savedLineBackgroundSpans) {
+            for ((color, savedStart, savedEnd) in savedLineBackgroundSpans) {
                 try {
-                    if (start >= 0 && end >= start && end <= editable.length) {
+                    // Clamp positions to the current text length to prevent crashes when text has changed
+                    val start = savedStart.coerceIn(0, editable.length)
+                    val end = savedEnd.coerceIn(start, editable.length)
+                    
+                    // Only apply span if it has valid range
+                    if (start < end && end <= editable.length) {
                         editable.setSpan(
                             android.text.style.LineBackgroundSpan.Standard(color),
                             start,
                             end,
                             android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                         )
+                    } else {
+                        android.util.Log.w("SyntaxHighlightEditText", "Skipping invalid LineBackgroundSpan range: start=$start, end=$end, length=${editable.length}")
                     }
                 } catch (e: Exception) {
                     android.util.Log.w("SyntaxHighlightEditText", "Error restoring LineBackgroundSpan", e)
