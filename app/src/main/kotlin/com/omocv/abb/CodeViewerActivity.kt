@@ -90,6 +90,13 @@ class CodeViewerActivity : AppCompatActivity() {
         // Apply saved theme
         applySavedTheme()
         
+        // Setup modern back press handling
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                handleBackPressed()
+            }
+        })
+        
         try {
             setContentView(R.layout.activity_code_viewer)
         } catch (e: Exception) {
@@ -147,23 +154,35 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        toolbar = findViewById(R.id.toolbar)
-        scrollViewLineNumbers = findViewById(R.id.scrollViewLineNumbers)
-        scrollViewCode = findViewById(R.id.scrollViewCode)
-        tvLineNumbers = findViewById(R.id.tvLineNumbers)
-        tvCodeContent = findViewById(R.id.tvCodeContent)
-        etCodeContent = findViewById(R.id.etCodeContent)
-        
-        setSupportActionBar(toolbar)
-        supportActionBar?.setDisplayHomeAsUpEnabled(true)
-        supportActionBar?.title = fileName
-        
-        toolbar.setNavigationOnClickListener {
-            handleBackPressed()
+        try {
+            // findViewById with null safety checks
+            toolbar = findViewById(R.id.toolbar) ?: throw IllegalStateException("Toolbar not found in layout")
+            scrollViewLineNumbers = findViewById(R.id.scrollViewLineNumbers) ?: throw IllegalStateException("scrollViewLineNumbers not found")
+            scrollViewCode = findViewById(R.id.scrollViewCode) ?: throw IllegalStateException("scrollViewCode not found")
+            tvLineNumbers = findViewById(R.id.tvLineNumbers) ?: throw IllegalStateException("tvLineNumbers not found")
+            tvCodeContent = findViewById(R.id.tvCodeContent) ?: throw IllegalStateException("tvCodeContent not found")
+            etCodeContent = findViewById(R.id.etCodeContent) ?: throw IllegalStateException("etCodeContent not found")
+            
+            setSupportActionBar(toolbar)
+            supportActionBar?.setDisplayHomeAsUpEnabled(true)
+            supportActionBar?.title = fileName
+            
+            toolbar.setNavigationOnClickListener {
+                handleBackPressed()
+            }
+            
+            // Synchronize scrolling between line numbers and code content
+            setupScrollSynchronization()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error initializing views", e)
+            Toast.makeText(
+                this,
+                "无法初始化界面: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
+            throw e // Re-throw to prevent further execution
         }
-        
-        // Synchronize scrolling between line numbers and code content
-        setupScrollSynchronization()
     }
     
     private fun setupScrollSynchronization() {
@@ -207,10 +226,6 @@ class CodeViewerActivity : AppCompatActivity() {
         } else {
             finish()
         }
-    }
-    
-    override fun onBackPressed() {
-        handleBackPressed()
     }
 
     private fun displayContent() {
@@ -624,36 +639,46 @@ class CodeViewerActivity : AppCompatActivity() {
             return
         }
         
-        val dialogView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
-        val rvRoutines = dialogView.findViewById<RecyclerView>(R.id.rvRoutines)
-        val btnSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
-        val btnDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
-        
-        rvRoutines.layoutManager = LinearLayoutManager(this)
-        val adapter = RoutineSelectionAdapter(routines)
-        rvRoutines.adapter = adapter
-        
-        btnSelectAll.setOnClickListener {
-            adapter.selectAll()
-        }
-        
-        btnDeselectAll.setOnClickListener {
-            adapter.deselectAll()
-        }
-        
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.select_routines))
-            .setView(dialogView)
-            .setPositiveButton(getString(R.string.replace)) { _, _ ->
-                val selectedRoutines = adapter.getSelectedRoutines()
-                if (selectedRoutines.isEmpty()) {
-                    Toast.makeText(this, getString(R.string.no_routines_selected), Toast.LENGTH_SHORT).show()
-                } else {
-                    replaceCode(searchText, replaceText, "routine", selectedRoutines, null)
-                }
+        try {
+            val dialogView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
+            val rvRoutines = dialogView.findViewById<RecyclerView>(R.id.rvRoutines)
+                ?: throw IllegalStateException("rvRoutines not found in dialog layout")
+            val btnSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
+                ?: throw IllegalStateException("btnSelectAll not found in dialog layout")
+            val btnDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
+                ?: throw IllegalStateException("btnDeselectAll not found in dialog layout")
+            
+            rvRoutines.layoutManager = LinearLayoutManager(this)
+            val adapter = RoutineSelectionAdapter(routines)
+            rvRoutines.adapter = adapter
+            
+            btnSelectAll.setOnClickListener {
+                adapter.selectAll()
             }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+            
+            btnDeselectAll.setOnClickListener {
+                adapter.deselectAll()
+            }
+            
+            MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.select_routines))
+                .setView(dialogView)
+                .setPositiveButton(getString(R.string.replace)) { _, _ ->
+                    val selectedRoutines = adapter.getSelectedRoutines()
+                    if (selectedRoutines.isEmpty()) {
+                        Toast.makeText(this, getString(R.string.no_routines_selected), Toast.LENGTH_SHORT).show()
+                    } else {
+                        replaceCode(searchText, replaceText, "routine", selectedRoutines, null)
+                    }
+                }
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error showing routine selection dialog", e)
+            Toast.makeText(this, "对话框创建失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            // Fallback to replace in all
+            replaceCode(searchText, replaceText, "all", null, null)
+        }
     }
     
     private fun showModuleSelectionDialog(searchText: String, replaceText: String) {
@@ -676,36 +701,46 @@ class CodeViewerActivity : AppCompatActivity() {
             return
         }
         
-        val dialogView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
-        val rvRoutines = dialogView.findViewById<RecyclerView>(R.id.rvRoutines)
-        val btnSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
-        val btnDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
-        
-        rvRoutines.layoutManager = LinearLayoutManager(this)
-        val adapter = ModuleSelectionAdapter(modules)
-        rvRoutines.adapter = adapter
-        
-        btnSelectAll.setOnClickListener {
-            adapter.selectAll()
-        }
-        
-        btnDeselectAll.setOnClickListener {
-            adapter.deselectAll()
-        }
-        
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.select_modules))
-            .setView(dialogView)
-            .setPositiveButton(getString(R.string.replace)) { _, _ ->
-                val selectedModules = adapter.getSelectedModules()
-                if (selectedModules.isEmpty()) {
-                    Toast.makeText(this, getString(R.string.no_modules_selected), Toast.LENGTH_SHORT).show()
-                } else {
-                    replaceCode(searchText, replaceText, "module", null, selectedModules)
-                }
+        try {
+            val dialogView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
+            val rvRoutines = dialogView.findViewById<RecyclerView>(R.id.rvRoutines)
+                ?: throw IllegalStateException("rvRoutines not found in dialog layout")
+            val btnSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
+                ?: throw IllegalStateException("btnSelectAll not found in dialog layout")
+            val btnDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
+                ?: throw IllegalStateException("btnDeselectAll not found in dialog layout")
+            
+            rvRoutines.layoutManager = LinearLayoutManager(this)
+            val adapter = ModuleSelectionAdapter(modules)
+            rvRoutines.adapter = adapter
+            
+            btnSelectAll.setOnClickListener {
+                adapter.selectAll()
             }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+            
+            btnDeselectAll.setOnClickListener {
+                adapter.deselectAll()
+            }
+            
+            MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.select_modules))
+                .setView(dialogView)
+                .setPositiveButton(getString(R.string.replace)) { _, _ ->
+                    val selectedModules = adapter.getSelectedModules()
+                    if (selectedModules.isEmpty()) {
+                        Toast.makeText(this, getString(R.string.no_modules_selected), Toast.LENGTH_SHORT).show()
+                    } else {
+                        replaceCode(searchText, replaceText, "module", null, selectedModules)
+                    }
+                }
+                .setNegativeButton(getString(R.string.cancel), null)
+                .show()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error showing module selection dialog", e)
+            Toast.makeText(this, "对话框创建失败: ${e.message}", Toast.LENGTH_SHORT).show()
+            // Fallback to replace in all
+            replaceCode(searchText, replaceText, "all", null, null)
+        }
     }
     
     private fun replaceCode(searchText: String, replaceText: String, scope: String, selectedRoutines: List<ABBRoutine>?, selectedModules: List<ABBModule>?) {
@@ -853,27 +888,34 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun showSearchResultsDialog(results: List<SearchResultAdapter.SearchResult>, query: String) {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_search_results, null)
-        val tvSearchResultsCount = dialogView.findViewById<TextView>(R.id.tvSearchResultsCount)
-        val rvSearchResults = dialogView.findViewById<RecyclerView>(R.id.rvSearchResults)
-        
-        tvSearchResultsCount.text = getString(R.string.search_results_count, results.size)
-        
-        rvSearchResults.layoutManager = LinearLayoutManager(this)
-        
-        val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.search_results))
-            .setView(dialogView)
-            .setNegativeButton(getString(R.string.close), null)
-            .create()
-        
-        // Set adapter with click listener to dismiss dialog
-        rvSearchResults.adapter = SearchResultAdapter(results, query) { result ->
-            jumpToLine(result.lineNumber)
-            dialog.dismiss()
+        try {
+            val dialogView = layoutInflater.inflate(R.layout.dialog_search_results, null)
+            val tvSearchResultsCount = dialogView.findViewById<TextView>(R.id.tvSearchResultsCount)
+                ?: throw IllegalStateException("tvSearchResultsCount not found in dialog layout")
+            val rvSearchResults = dialogView.findViewById<RecyclerView>(R.id.rvSearchResults)
+                ?: throw IllegalStateException("rvSearchResults not found in dialog layout")
+            
+            tvSearchResultsCount.text = getString(R.string.search_results_count, results.size)
+            
+            rvSearchResults.layoutManager = LinearLayoutManager(this)
+            
+            val dialog = MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.search_results))
+                .setView(dialogView)
+                .setNegativeButton(getString(R.string.close), null)
+                .create()
+            
+            // Set adapter with click listener to dismiss dialog
+            rvSearchResults.adapter = SearchResultAdapter(results, query) { result ->
+                jumpToLine(result.lineNumber)
+                dialog.dismiss()
+            }
+            
+            dialog.show()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error showing search results dialog", e)
+            Toast.makeText(this, "显示搜索结果失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-        
-        dialog.show()
     }
     
     private fun jumpToLine(lineNumber: Int) {
@@ -1119,16 +1161,29 @@ class CodeViewerActivity : AppCompatActivity() {
             return
         }
         
-        val items = bookmarks.sorted().map { getString(R.string.line_number, it) }.toTypedArray()
-        
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.bookmarks))
-            .setItems(items) { _, which ->
-                val lineNumber = bookmarks.sorted()[which].toInt()
-                jumpToLine(lineNumber)
-            }
-            .setNegativeButton(getString(R.string.close), null)
-            .show()
+        try {
+            val items = bookmarks.sorted().map { getString(R.string.line_number, it) }.toTypedArray()
+            
+            MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.bookmarks))
+                .setItems(items) { _, which ->
+                    try {
+                        val sortedBookmarks = bookmarks.sorted()
+                        if (which >= 0 && which < sortedBookmarks.size) {
+                            val lineNumber = sortedBookmarks[which].toInt()
+                            jumpToLine(lineNumber)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("CodeViewerActivity", "Error navigating to bookmark", e)
+                        Toast.makeText(this, "跳转失败", Toast.LENGTH_SHORT).show()
+                    }
+                }
+                .setNegativeButton(getString(R.string.close), null)
+                .show()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error showing bookmarks", e)
+            Toast.makeText(this, "显示书签失败", Toast.LENGTH_SHORT).show()
+        }
     }
 
     private fun formatCode() {
@@ -1252,25 +1307,32 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun showSyntaxErrorsDialog(errors: List<SyntaxError>) {
-        val dialogView = layoutInflater.inflate(R.layout.dialog_search_results, null)
-        val tvSearchResultsCount = dialogView.findViewById<TextView>(R.id.tvSearchResultsCount)
-        val rvSearchResults = dialogView.findViewById<RecyclerView>(R.id.rvSearchResults)
-        
-        tvSearchResultsCount.text = getString(R.string.syntax_errors_found, errors.size)
-        
-        rvSearchResults.layoutManager = LinearLayoutManager(this)
-        
-        val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.syntax_errors))
-            .setView(dialogView)
-            .setPositiveButton(getString(R.string.ok), null)
-            .create()
-        
-        rvSearchResults.adapter = SyntaxErrorAdapter(errors) { error ->
-            jumpToLine(error.lineNumber)
-            dialog.dismiss()
+        try {
+            val dialogView = layoutInflater.inflate(R.layout.dialog_search_results, null)
+            val tvSearchResultsCount = dialogView.findViewById<TextView>(R.id.tvSearchResultsCount)
+                ?: throw IllegalStateException("tvSearchResultsCount not found in dialog layout")
+            val rvSearchResults = dialogView.findViewById<RecyclerView>(R.id.rvSearchResults)
+                ?: throw IllegalStateException("rvSearchResults not found in dialog layout")
+            
+            tvSearchResultsCount.text = getString(R.string.syntax_errors_found, errors.size)
+            
+            rvSearchResults.layoutManager = LinearLayoutManager(this)
+            
+            val dialog = MaterialAlertDialogBuilder(this)
+                .setTitle(getString(R.string.syntax_errors))
+                .setView(dialogView)
+                .setPositiveButton(getString(R.string.ok), null)
+                .create()
+            
+            rvSearchResults.adapter = SyntaxErrorAdapter(errors) { error ->
+                jumpToLine(error.lineNumber)
+                dialog.dismiss()
+            }
+            
+            dialog.show()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error showing syntax errors dialog", e)
+            Toast.makeText(this, "显示语法错误失败: ${e.message}", Toast.LENGTH_SHORT).show()
         }
-        
-        dialog.show()
     }
 }

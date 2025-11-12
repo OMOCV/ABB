@@ -106,21 +106,42 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun initViews() {
-        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
-        setSupportActionBar(toolbar)
+        try {
+            val toolbar = findViewById<MaterialToolbar>(R.id.toolbar) 
+                ?: throw IllegalStateException("Toolbar not found in layout")
+            setSupportActionBar(toolbar)
 
-        btnSelectFile = findViewById(R.id.btnSelectFile)
-        tvFileName = findViewById(R.id.tvFileName)
-        tvFileType = findViewById(R.id.tvFileType)
-        tvContent = findViewById(R.id.tvContent)
-        cardModules = findViewById(R.id.cardModules)
-        cardRoutines = findViewById(R.id.cardRoutines)
-        cardContent = findViewById(R.id.cardContent)
-        rvModules = findViewById(R.id.rvModules)
-        rvRoutines = findViewById(R.id.rvRoutines)
+            btnSelectFile = findViewById(R.id.btnSelectFile) 
+                ?: throw IllegalStateException("btnSelectFile not found")
+            tvFileName = findViewById(R.id.tvFileName) 
+                ?: throw IllegalStateException("tvFileName not found")
+            tvFileType = findViewById(R.id.tvFileType) 
+                ?: throw IllegalStateException("tvFileType not found")
+            tvContent = findViewById(R.id.tvContent) 
+                ?: throw IllegalStateException("tvContent not found")
+            cardModules = findViewById(R.id.cardModules) 
+                ?: throw IllegalStateException("cardModules not found")
+            cardRoutines = findViewById(R.id.cardRoutines) 
+                ?: throw IllegalStateException("cardRoutines not found")
+            cardContent = findViewById(R.id.cardContent) 
+                ?: throw IllegalStateException("cardContent not found")
+            rvModules = findViewById(R.id.rvModules) 
+                ?: throw IllegalStateException("rvModules not found")
+            rvRoutines = findViewById(R.id.rvRoutines) 
+                ?: throw IllegalStateException("rvRoutines not found")
 
-        rvModules.layoutManager = LinearLayoutManager(this)
-        rvRoutines.layoutManager = LinearLayoutManager(this)
+            rvModules.layoutManager = LinearLayoutManager(this)
+            rvRoutines.layoutManager = LinearLayoutManager(this)
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error initializing views", e)
+            Toast.makeText(
+                this,
+                "无法初始化界面: ${e.message}",
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
+            throw e // Re-throw to prevent further execution
+        }
     }
 
     private fun setupListeners() {
