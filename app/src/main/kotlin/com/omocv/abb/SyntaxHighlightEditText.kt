@@ -50,12 +50,10 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
             )
         }
         
-        // Remove all existing spans except BackgroundColorSpan
+        // Remove all existing spans (including BackgroundColorSpan, which will be restored later)
         val spans = editable.getSpans(0, editable.length, Object::class.java)
         for (span in spans) {
-            if (span !is android.text.style.BackgroundColorSpan) {
-                editable.removeSpan(span)
-            }
+            editable.removeSpan(span)
         }
         
         // Apply new syntax highlighting
@@ -69,6 +67,13 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
             
             if (start >= 0 && end <= editable.length) {
                 editable.setSpan(span, start, end, flags)
+            }
+        }
+        
+        // Restore saved BackgroundColorSpan (for highlighting search results and errors)
+        for ((span, start, end) in savedSpans) {
+            if (start >= 0 && end <= editable.length) {
+                editable.setSpan(span, start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             }
         }
         
