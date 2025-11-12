@@ -50,7 +50,8 @@ class CodeViewerActivity : AppCompatActivity() {
     private var currentProgramFile: ABBProgramFile? = null
     private var isScrollSyncing = false  // Flag to prevent infinite scroll loop
     private var currentHighlightedLine: Int = -1  // Track currently highlighted line
-    private var currentHighlightSpan: Any? = null  // Track current highlight span (LineBackgroundSpan or BackgroundColorSpan)
+    private var currentHighlightStartPos: Int = -1  // Track start position of current highlight
+    private var currentHighlightEndPos: Int = -1  // Track end position of current highlight
     
     // File save launcher for save-as functionality
     private val saveFileLauncher = registerForActivityResult(
@@ -1057,16 +1058,43 @@ class CodeViewerActivity : AppCompatActivity() {
                 // Apply highlighting in edit mode with full line background
                 val editableContent = etCodeContent.text
                 if (editableContent is Spannable && editableContent.length >= endPos) {
-                    // Remove previous highlight span if it exists
-                    if (currentHighlightSpan != null) {
-                        editableContent.removeSpan(currentHighlightSpan)
+                    // Remove previous highlight spans if they exist
+                    // Use try-catch to safely remove stale spans that may have been recreated
+                    // by SyntaxHighlightEditText during syntax highlighting
+                    if (currentHighlightStartPos >= 0 && currentHighlightEndPos >= 0) {
+                        try {
+                            // Find and remove any LineBackgroundSpan.Standard at the previous highlight position
+                            val existingSpans = editableContent.getSpans(
+                                currentHighlightStartPos.coerceIn(0, editableContent.length),
+                                currentHighlightEndPos.coerceIn(0, editableContent.length),
+                                android.text.style.LineBackgroundSpan.Standard::class.java
+                            )
+                            for (span in existingSpans) {
+                                try {
+                                    // Only remove if it's at the exact same position
+                                    val spanStart = editableContent.getSpanStart(span)
+                                    val spanEnd = editableContent.getSpanEnd(span)
+                                    if (spanStart == currentHighlightStartPos && spanEnd == currentHighlightEndPos) {
+                                        editableContent.removeSpan(span)
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.w("CodeViewerActivity", "Error removing individual highlight span", e)
+                                }
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.w("CodeViewerActivity", "Error removing previous highlight spans", e)
+                        }
                     }
+                    
+                    // Store the new highlight positions
+                    currentHighlightStartPos = startPos
+                    currentHighlightEndPos = endPos
                     
                     // Use LineBackgroundSpan for full-line-width highlighting
                     // This ensures the entire line width is highlighted, not just the text
-                    currentHighlightSpan = android.text.style.LineBackgroundSpan.Standard(highlightColor)
+                    val newHighlightSpan = android.text.style.LineBackgroundSpan.Standard(highlightColor)
                     editableContent.setSpan(
-                        currentHighlightSpan,
+                        newHighlightSpan,
                         startPos,
                         endPos,
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
@@ -1103,13 +1131,34 @@ class CodeViewerActivity : AppCompatActivity() {
         if (currentHighlightedLine != -1) {
             currentHighlightedLine = -1
             
-            // Clear highlight span in edit mode
-            if (isEditMode && currentHighlightSpan != null) {
+            // Clear highlight spans in edit mode by position
+            if (isEditMode && currentHighlightStartPos >= 0 && currentHighlightEndPos >= 0) {
                 val content = etCodeContent.text
                 if (content is Spannable) {
-                    content.removeSpan(currentHighlightSpan)
+                    try {
+                        // Find and remove any LineBackgroundSpan.Standard at the highlight position
+                        val existingSpans = content.getSpans(
+                            currentHighlightStartPos.coerceIn(0, content.length),
+                            currentHighlightEndPos.coerceIn(0, content.length),
+                            android.text.style.LineBackgroundSpan.Standard::class.java
+                        )
+                        for (span in existingSpans) {
+                            try {
+                                val spanStart = content.getSpanStart(span)
+                                val spanEnd = content.getSpanEnd(span)
+                                if (spanStart == currentHighlightStartPos && spanEnd == currentHighlightEndPos) {
+                                    content.removeSpan(span)
+                                }
+                            } catch (e: Exception) {
+                                android.util.Log.w("CodeViewerActivity", "Error removing highlight span", e)
+                            }
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.w("CodeViewerActivity", "Error clearing highlight", e)
+                    }
                 }
-                currentHighlightSpan = null
+                currentHighlightStartPos = -1
+                currentHighlightEndPos = -1
             }
             
             // Clear in view mode
