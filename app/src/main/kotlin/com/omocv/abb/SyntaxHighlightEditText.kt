@@ -41,8 +41,8 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
         val cursorPosition = selectionStart
         
         // Save any BackgroundColorSpan (used for highlighting search results and errors)
-        val backgroundSpans = editable.getSpans(0, editable.length, android.text.style.BackgroundColorSpan::class.java)
-        val savedSpans = backgroundSpans.map { span ->
+        val backgroundColorSpans = editable.getSpans(0, editable.length, android.text.style.BackgroundColorSpan::class.java)
+        val savedBackgroundColorSpans = backgroundColorSpans.map { span ->
             // Extract the color from the span to create a new one later
             Triple(
                 (span as android.text.style.BackgroundColorSpan).backgroundColor,
@@ -51,7 +51,18 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
             )
         }
         
-        // Remove all existing spans (including BackgroundColorSpan, which will be restored later)
+        // Save any LineBackgroundSpan.Standard (used for full-line highlighting)
+        val lineBackgroundSpans = editable.getSpans(0, editable.length, android.text.style.LineBackgroundSpan.Standard::class.java)
+        val savedLineBackgroundSpans = lineBackgroundSpans.map { span ->
+            // Extract the color from the span to create a new one later
+            Triple(
+                (span as android.text.style.LineBackgroundSpan.Standard).color,
+                editable.getSpanStart(span),
+                editable.getSpanEnd(span)
+            )
+        }
+        
+        // Remove all existing spans (including background spans, which will be restored later)
         val spans = editable.getSpans(0, editable.length, Object::class.java)
         for (span in spans) {
             editable.removeSpan(span)
@@ -73,10 +84,23 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
         
         // Restore saved BackgroundColorSpan (for highlighting search results and errors)
         // Create NEW spans with the saved color values instead of reusing the old span objects
-        for ((color, start, end) in savedSpans) {
+        for ((color, start, end) in savedBackgroundColorSpans) {
             if (start >= 0 && end <= editable.length) {
                 editable.setSpan(
                     android.text.style.BackgroundColorSpan(color),
+                    start,
+                    end,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
+        
+        // Restore saved LineBackgroundSpan.Standard (for full-line highlighting)
+        // Create NEW spans with the saved color values instead of reusing the old span objects
+        for ((color, start, end) in savedLineBackgroundSpans) {
+            if (start >= 0 && end <= editable.length) {
+                editable.setSpan(
+                    android.text.style.LineBackgroundSpan.Standard(color),
                     start,
                     end,
                     android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE

@@ -50,7 +50,7 @@ class CodeViewerActivity : AppCompatActivity() {
     private var currentProgramFile: ABBProgramFile? = null
     private var isScrollSyncing = false  // Flag to prevent infinite scroll loop
     private var currentHighlightedLine: Int = -1  // Track currently highlighted line
-    private var currentHighlightSpan: BackgroundColorSpan? = null  // Track current highlight span
+    private var currentHighlightSpan: Any? = null  // Track current highlight span (LineBackgroundSpan or BackgroundColorSpan)
     
     // File save launcher for save-as functionality
     private val saveFileLauncher = registerForActivityResult(
@@ -833,15 +833,15 @@ class CodeViewerActivity : AppCompatActivity() {
             }
             val endPos = startPos + lines[lineNumber - 1].length
             
-            // Use a more visible highlight color
+            // Use a more visible highlight color with higher contrast
             val highlightColor = if (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES) {
-                Color.parseColor("#555555") // Lighter gray for dark theme (more visible)
+                Color.parseColor("#666666") // Even lighter gray for dark theme (more prominent)
             } else {
-                Color.parseColor("#FFFF00") // Bright yellow for light theme (more visible)
+                Color.parseColor("#FFFF00") // Bright yellow for light theme (already very visible)
             }
             
             if (isEditMode) {
-                // Apply highlighting in edit mode
+                // Apply highlighting in edit mode with full line background
                 val editableContent = etCodeContent.text
                 if (editableContent is Spannable) {
                     // Remove previous highlight span if it exists
@@ -849,8 +849,9 @@ class CodeViewerActivity : AppCompatActivity() {
                         editableContent.removeSpan(currentHighlightSpan)
                     }
                     
-                    // Create and apply new highlight span
-                    currentHighlightSpan = BackgroundColorSpan(highlightColor)
+                    // Use LineBackgroundSpan for full-line-width highlighting
+                    // This ensures the entire line width is highlighted, not just the text
+                    currentHighlightSpan = android.text.style.LineBackgroundSpan.Standard(highlightColor)
                     editableContent.setSpan(
                         currentHighlightSpan,
                         startPos,
@@ -861,10 +862,10 @@ class CodeViewerActivity : AppCompatActivity() {
             } else {
                 // Apply syntax highlighting first in view mode
                 val highlighted = syntaxHighlighter.highlight(content)
-                // Then add the background span to the highlighted text
+                // Then add the full-line background span to the highlighted text
                 val finalSpannable = SpannableString(highlighted)
                 finalSpannable.setSpan(
-                    BackgroundColorSpan(highlightColor),
+                    android.text.style.LineBackgroundSpan.Standard(highlightColor),
                     startPos,
                     endPos.coerceAtMost(content.length),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
