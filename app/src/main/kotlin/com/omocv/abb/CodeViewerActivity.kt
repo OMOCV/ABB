@@ -757,8 +757,35 @@ class CodeViewerActivity : AppCompatActivity() {
             }
             
             if (isEditMode) {
-                // Set cursor to the line in edit mode
-                etCodeContent.setSelection(charPosition.coerceAtMost(etCodeContent.text?.length ?: 0))
+                // Find the first non-whitespace character on the line for better cursor visibility
+                val currentLine = lines[lineNumber - 1]
+                val firstNonWhitespace = currentLine.indexOfFirst { !it.isWhitespace() }
+                val selectionStart = if (firstNonWhitespace >= 0) {
+                    charPosition + firstNonWhitespace
+                } else {
+                    charPosition
+                }
+                
+                // Select to the end of the first word or at least a few characters for visibility
+                val wordEnd = if (firstNonWhitespace >= 0) {
+                    currentLine.substring(firstNonWhitespace).indexOfFirst { it.isWhitespace() }.let { idx ->
+                        if (idx >= 0) firstNonWhitespace + idx else -1
+                    }
+                } else {
+                    -1
+                }
+                val selectionEnd = if (wordEnd > firstNonWhitespace) {
+                    charPosition + wordEnd
+                } else {
+                    // Select the entire line if no word boundary found
+                    (charPosition + currentLine.length).coerceAtMost(etCodeContent.text?.length ?: 0)
+                }
+                
+                // Set selection range to make cursor position highly visible
+                etCodeContent.setSelection(
+                    selectionStart.coerceAtMost(etCodeContent.text?.length ?: 0),
+                    selectionEnd.coerceAtMost(etCodeContent.text?.length ?: 0)
+                )
                 etCodeContent.requestFocus()
                 
                 // Highlight the line in edit mode
