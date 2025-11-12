@@ -788,8 +788,8 @@ class CodeViewerActivity : AppCompatActivity() {
                 )
                 etCodeContent.requestFocus()
                 
-                // Highlight the line in edit mode
-                highlightLineInEditMode(lineNumber)
+                // Highlight the line using the unified method
+                highlightLine(lineNumber)
                 
                 // Scroll to make the cursor visible
                 etCodeContent.post {
@@ -807,54 +807,13 @@ class CodeViewerActivity : AppCompatActivity() {
                         val lineTop = layout.getLineTop(lineNumber - 1)
                         scrollViewCode.smoothScrollTo(0, lineTop)
                         
-                        // Highlight the line temporarily
+                        // Highlight the line using the unified method
                         highlightLine(lineNumber)
                     }
                 }
             }
             
             Toast.makeText(this, getString(R.string.jumped_to_line, lineNumber), Toast.LENGTH_SHORT).show()
-        }
-    }
-    
-    private fun highlightLineInEditMode(lineNumber: Int) {
-        // Highlight the target line in edit mode by adding a background color span
-        val content = etCodeContent.text
-        if (content != null && content is Spannable) {
-            val lines = content.toString().lines()
-            
-            if (lineNumber > 0 && lineNumber <= lines.size) {
-                // Store the currently highlighted line
-                currentHighlightedLine = lineNumber
-                
-                // Calculate character positions for the line
-                var startPos = 0
-                for (i in 0 until lineNumber - 1) {
-                    startPos += lines[i].length + 1
-                }
-                val endPos = startPos + lines[lineNumber - 1].length
-                
-                // Use a more visible highlight color
-                val highlightColor = if (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES) {
-                    Color.parseColor("#555555") // Lighter gray for dark theme (more visible)
-                } else {
-                    Color.parseColor("#FFFF00") // Bright yellow for light theme (more visible)
-                }
-                
-                // Remove previous highlight span if it exists
-                if (currentHighlightSpan != null) {
-                    content.removeSpan(currentHighlightSpan)
-                }
-                
-                // Create and apply new highlight span
-                currentHighlightSpan = BackgroundColorSpan(highlightColor)
-                content.setSpan(
-                    currentHighlightSpan,
-                    startPos,
-                    endPos.coerceAtMost(content.length),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-            }
         }
     }
     
@@ -881,8 +840,26 @@ class CodeViewerActivity : AppCompatActivity() {
                 Color.parseColor("#FFFF00") // Bright yellow for light theme (more visible)
             }
             
-            if (!isEditMode) {
-                // Apply syntax highlighting first
+            if (isEditMode) {
+                // Apply highlighting in edit mode
+                val editableContent = etCodeContent.text
+                if (editableContent is Spannable) {
+                    // Remove previous highlight span if it exists
+                    if (currentHighlightSpan != null) {
+                        editableContent.removeSpan(currentHighlightSpan)
+                    }
+                    
+                    // Create and apply new highlight span
+                    currentHighlightSpan = BackgroundColorSpan(highlightColor)
+                    editableContent.setSpan(
+                        currentHighlightSpan,
+                        startPos,
+                        endPos.coerceAtMost(editableContent.length),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
+            } else {
+                // Apply syntax highlighting first in view mode
                 val highlighted = syntaxHighlighter.highlight(content)
                 // Then add the background span to the highlighted text
                 val finalSpannable = SpannableString(highlighted)
