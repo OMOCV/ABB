@@ -72,6 +72,8 @@ class CodeViewerActivity : AppCompatActivity() {
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_BOOKMARKS = "bookmarks_"
         private const val KEY_REAL_TIME_CHECK = "real_time_syntax_check"
+        private const val MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024 // 5 MB limit for safe handling
+        private const val MAX_LINES_FOR_SYNTAX_HIGHLIGHT = 10000 // Limit syntax highlighting for large files
         
         fun newIntent(context: Context, fileName: String, fileContent: String, fileUri: String? = null): Intent {
             return Intent(context, CodeViewerActivity::class.java).apply {
@@ -106,6 +108,16 @@ class CodeViewerActivity : AppCompatActivity() {
         fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
         fileUri = intent.getStringExtra(EXTRA_FILE_URI)
         originalContent = fileContent
+        
+        // Validate file size to prevent crashes
+        if (fileContent.length > MAX_FILE_SIZE_BYTES) {
+            android.util.Log.w("CodeViewerActivity", "File too large: ${fileContent.length} bytes")
+            Toast.makeText(
+                this,
+                "文件过大 (${fileContent.length / 1024 / 1024} MB)，可能会影响性能",
+                Toast.LENGTH_LONG
+            ).show()
+        }
         
         // Parse the file content to get routines info
         try {
@@ -202,22 +214,63 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun displayContent() {
-        val lines = fileContent.lines()
-        val lineCount = lines.size
-        
-        // Generate line numbers
-        val lineNumbers = StringBuilder()
-        for (i in 1..lineCount) {
-            lineNumbers.append("$i\n")
-        }
-        tvLineNumbers.text = lineNumbers.toString()
-        
-        // Apply syntax highlighting
-        if (isEditMode) {
-            etCodeContent.setText(fileContent)
-        } else {
-            val highlightedContent = syntaxHighlighter.highlight(fileContent)
-            tvCodeContent.text = highlightedContent
+        try {
+            val lines = fileContent.lines()
+            val lineCount = lines.size
+            
+            // Validate line count
+            if (lineCount <= 0) {
+                android.util.Log.w("CodeViewerActivity", "Empty content")
+                tvLineNumbers.text = ""
+                tvCodeContent.text = ""
+                return
+            }
+            
+            // Generate line numbers
+            val lineNumbers = StringBuilder()
+            for (i in 1..lineCount) {
+                lineNumbers.append("$i\n")
+            }
+            tvLineNumbers.text = lineNumbers.toString()
+            
+            // Apply syntax highlighting with size check
+            if (isEditMode) {
+                etCodeContent.setText(fileContent)
+            } else {
+                // Check if file is too large for syntax highlighting
+                if (lineCount > MAX_LINES_FOR_SYNTAX_HIGHLIGHT) {
+                    android.util.Log.w("CodeViewerActivity", "File too large for syntax highlighting: $lineCount lines")
+                    tvCodeContent.text = fileContent
+                    Toast.makeText(
+                        this,
+                        "文件过大 ($lineCount 行)，已禁用语法高亮",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    val highlightedContent = syntaxHighlighter.highlight(fileContent)
+                    tvCodeContent.text = highlightedContent
+                }
+            }
+        } catch (e: OutOfMemoryError) {
+            android.util.Log.e("CodeViewerActivity", "Out of memory displaying content", e)
+            Toast.makeText(
+                this,
+                "内存不足，无法显示文件内容",
+                Toast.LENGTH_LONG
+            ).show()
+            finish()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error displaying content", e)
+            // Try to display without syntax highlighting as fallback
+            try {
+                tvCodeContent.text = fileContent
+            } catch (e2: Exception) {
+                Toast.makeText(
+                    this,
+                    "无法显示文件内容",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
     
@@ -747,9 +800,21 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun jumpToLine(lineNumber: Int) {
-        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val lines = content.lines()
-        if (lineNumber > 0 && lineNumber <= lines.size) {
+        try {
+            val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+            val lines = content.lines()
+            
+            // Validate line number bounds
+            if (lineNumber <= 0 || lineNumber > lines.size) {
+                android.util.Log.w("CodeViewerActivity", "Invalid line number: $lineNumber (total: ${lines.size})")
+                Toast.makeText(
+                    this,
+                    "无效的行号: $lineNumber",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
+            }
+            
             // Calculate the character position of the line
             var charPosition = 0
             for (i in 0 until lineNumber - 1) {
@@ -781,11 +846,13 @@ class CodeViewerActivity : AppCompatActivity() {
                     (charPosition + currentLine.length).coerceAtMost(etCodeContent.text?.length ?: 0)
                 }
                 
+                // Validate selection bounds
+                val textLength = etCodeContent.text?.length ?: 0
+                val safeStart = selectionStart.coerceIn(0, textLength)
+                val safeEnd = selectionEnd.coerceIn(safeStart, textLength)
+                
                 // Set selection range to make cursor position highly visible
-                etCodeContent.setSelection(
-                    selectionStart.coerceAtMost(etCodeContent.text?.length ?: 0),
-                    selectionEnd.coerceAtMost(etCodeContent.text?.length ?: 0)
-                )
+                etCodeContent.setSelection(safeStart, safeEnd)
                 etCodeContent.requestFocus()
                 
                 // Highlight the line using the unified method
@@ -793,36 +860,57 @@ class CodeViewerActivity : AppCompatActivity() {
                 
                 // Scroll to make the cursor visible
                 etCodeContent.post {
-                    val layout = etCodeContent.layout
-                    if (layout != null && lineNumber - 1 < layout.lineCount) {
-                        val lineTop = layout.getLineTop(lineNumber - 1)
-                        scrollViewCode.smoothScrollTo(0, lineTop)
+                    try {
+                        val layout = etCodeContent.layout
+                        if (layout != null && lineNumber - 1 >= 0 && lineNumber - 1 < layout.lineCount) {
+                            val lineTop = layout.getLineTop(lineNumber - 1)
+                            scrollViewCode.smoothScrollTo(0, lineTop)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("CodeViewerActivity", "Error scrolling to line", e)
                     }
                 }
             } else {
                 // Calculate the Y position of the line in view mode
                 tvCodeContent.post {
-                    val layout = tvCodeContent.layout
-                    if (layout != null && lineNumber - 1 < layout.lineCount) {
-                        val lineTop = layout.getLineTop(lineNumber - 1)
-                        scrollViewCode.smoothScrollTo(0, lineTop)
-                        
-                        // Highlight the line using the unified method
-                        highlightLine(lineNumber)
+                    try {
+                        val layout = tvCodeContent.layout
+                        if (layout != null && lineNumber - 1 >= 0 && lineNumber - 1 < layout.lineCount) {
+                            val lineTop = layout.getLineTop(lineNumber - 1)
+                            scrollViewCode.smoothScrollTo(0, lineTop)
+                            
+                            // Highlight the line using the unified method
+                            highlightLine(lineNumber)
+                        }
+                    } catch (e: Exception) {
+                        android.util.Log.e("CodeViewerActivity", "Error scrolling to line", e)
                     }
                 }
             }
             
             Toast.makeText(this, getString(R.string.jumped_to_line, lineNumber), Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error jumping to line", e)
+            Toast.makeText(
+                this,
+                "无法跳转到行 $lineNumber",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
     
     private fun highlightLine(lineNumber: Int) {
-        // Highlight the target line persistently by adding a background color
-        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val lines = content.lines()
-        
-        if (lineNumber > 0 && lineNumber <= lines.size) {
+        try {
+            // Highlight the target line persistently by adding a background color
+            val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+            val lines = content.lines()
+            
+            // Validate line number bounds
+            if (lineNumber <= 0 || lineNumber > lines.size) {
+                android.util.Log.w("CodeViewerActivity", "Invalid line number for highlight: $lineNumber")
+                return
+            }
+            
             // Store the currently highlighted line
             currentHighlightedLine = lineNumber
             
@@ -831,7 +919,13 @@ class CodeViewerActivity : AppCompatActivity() {
             for (i in 0 until lineNumber - 1) {
                 startPos += lines[i].length + 1
             }
-            val endPos = startPos + lines[lineNumber - 1].length
+            val endPos = (startPos + lines[lineNumber - 1].length).coerceAtMost(content.length)
+            
+            // Validate positions
+            if (startPos < 0 || startPos > content.length || endPos < startPos || endPos > content.length) {
+                android.util.Log.w("CodeViewerActivity", "Invalid highlight positions: start=$startPos, end=$endPos, length=${content.length}")
+                return
+            }
             
             // Use a more visible highlight color with higher contrast
             val highlightColor = if (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES) {
@@ -843,7 +937,7 @@ class CodeViewerActivity : AppCompatActivity() {
             if (isEditMode) {
                 // Apply highlighting in edit mode with full line background
                 val editableContent = etCodeContent.text
-                if (editableContent is Spannable) {
+                if (editableContent is Spannable && editableContent.length >= endPos) {
                     // Remove previous highlight span if it exists
                     if (currentHighlightSpan != null) {
                         editableContent.removeSpan(currentHighlightSpan)
@@ -855,7 +949,7 @@ class CodeViewerActivity : AppCompatActivity() {
                     editableContent.setSpan(
                         currentHighlightSpan,
                         startPos,
-                        endPos.coerceAtMost(editableContent.length),
+                        endPos,
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     )
                 }
@@ -864,12 +958,14 @@ class CodeViewerActivity : AppCompatActivity() {
                 val highlighted = syntaxHighlighter.highlight(content)
                 // Then add the full-line background span to the highlighted text
                 val finalSpannable = SpannableString(highlighted)
-                finalSpannable.setSpan(
-                    android.text.style.LineBackgroundSpan.Standard(highlightColor),
-                    startPos,
-                    endPos.coerceAtMost(content.length),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
+                if (finalSpannable.length >= endPos) {
+                    finalSpannable.setSpan(
+                        android.text.style.LineBackgroundSpan.Standard(highlightColor),
+                        startPos,
+                        endPos,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
                 tvCodeContent.text = finalSpannable
                 
                 // Set up click listener to clear highlight when user clicks on the code
@@ -877,6 +973,9 @@ class CodeViewerActivity : AppCompatActivity() {
                     clearHighlight()
                 }
             }
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error highlighting line", e)
+            // Don't show toast to avoid spam, just log the error
         }
     }
     
