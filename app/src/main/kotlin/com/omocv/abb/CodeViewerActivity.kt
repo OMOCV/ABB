@@ -275,26 +275,58 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun toggleEditMode() {
-        isEditMode = !isEditMode
-        
-        if (isEditMode) {
-            // Switch to edit mode
-            tvCodeContent.visibility = View.GONE
-            etCodeContent.visibility = View.VISIBLE
-            etCodeContent.setText(fileContent)
-            etCodeContent.setHighlightingEnabled(true)  // Enable syntax highlighting in edit mode
-            Toast.makeText(this, getString(R.string.editing_enabled), Toast.LENGTH_SHORT).show()
-        } else {
-            // Switch to view mode
-            fileContent = etCodeContent.text.toString()
-            tvCodeContent.visibility = View.VISIBLE
-            etCodeContent.visibility = View.GONE
-            displayContent()
-            Toast.makeText(this, getString(R.string.editing_disabled), Toast.LENGTH_SHORT).show()
+        try {
+            isEditMode = !isEditMode
+            
+            if (isEditMode) {
+                // Switch to edit mode
+                tvCodeContent.visibility = View.GONE
+                etCodeContent.visibility = View.VISIBLE
+                etCodeContent.setText(fileContent)
+                
+                // Check file size before enabling real-time highlighting
+                val lines = fileContent.lines()
+                if (lines.size > MAX_LINES_FOR_SYNTAX_HIGHLIGHT || fileContent.length > 500000) {
+                    etCodeContent.setHighlightingEnabled(false)
+                    Toast.makeText(
+                        this,
+                        "文件过大，编辑模式下已禁用实时语法高亮",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                } else {
+                    etCodeContent.setHighlightingEnabled(true)  // Enable syntax highlighting in edit mode
+                }
+                Toast.makeText(this, getString(R.string.editing_enabled), Toast.LENGTH_SHORT).show()
+            } else {
+                // Switch to view mode
+                fileContent = etCodeContent.text.toString()
+                tvCodeContent.visibility = View.VISIBLE
+                etCodeContent.visibility = View.GONE
+                displayContent()
+                Toast.makeText(this, getString(R.string.editing_disabled), Toast.LENGTH_SHORT).show()
+            }
+            
+            // Update menu
+            invalidateOptionsMenu()
+        } catch (e: OutOfMemoryError) {
+            android.util.Log.e("CodeViewerActivity", "Out of memory toggling edit mode", e)
+            Toast.makeText(
+                this,
+                "内存不足，无法切换编辑模式",
+                Toast.LENGTH_LONG
+            ).show()
+            // Revert edit mode state
+            isEditMode = !isEditMode
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error toggling edit mode", e)
+            Toast.makeText(
+                this,
+                "无法切换编辑模式",
+                Toast.LENGTH_SHORT
+            ).show()
+            // Revert edit mode state
+            isEditMode = !isEditMode
         }
-        
-        // Update menu
-        invalidateOptionsMenu()
     }
     
     private fun saveChanges() {
@@ -677,101 +709,146 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun replaceCode(searchText: String, replaceText: String, scope: String, selectedRoutines: List<ABBRoutine>?, selectedModules: List<ABBModule>?) {
-        var content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        var count = 0
-        
-        when (scope) {
-            "all" -> {
-                // Replace all occurrences
-                val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
-                count = regex.findAll(content).count()
-                content = content.replace(searchText, replaceText, ignoreCase = true)
+        try {
+            var content = if (isEditMode) etCodeContent.text.toString() else fileContent
+            var count = 0
+            
+            // Check content size
+            if (content.length > MAX_FILE_SIZE_BYTES) {
+                Toast.makeText(
+                    this,
+                    "文件过大，无法执行替换操作",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
             }
-            "routine" -> {
-                // Replace only in selected routines
-                if (selectedRoutines != null && selectedRoutines.isNotEmpty()) {
-                    val lines = content.lines().toMutableList()
-                    
-                    for (routine in selectedRoutines) {
-                        for (lineIdx in routine.startLine..routine.endLine.coerceAtMost(lines.size - 1)) {
-                            if (lineIdx < lines.size) {
-                                val line = lines[lineIdx]
-                                if (line.contains(searchText, ignoreCase = true)) {
-                                    val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
-                                    count += regex.findAll(line).count()
-                                    lines[lineIdx] = line.replace(searchText, replaceText, ignoreCase = true)
+            
+            when (scope) {
+                "all" -> {
+                    // Replace all occurrences
+                    val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
+                    count = regex.findAll(content).count()
+                    content = content.replace(searchText, replaceText, ignoreCase = true)
+                }
+                "routine" -> {
+                    // Replace only in selected routines
+                    if (selectedRoutines != null && selectedRoutines.isNotEmpty()) {
+                        val lines = content.lines().toMutableList()
+                        
+                        for (routine in selectedRoutines) {
+                            for (lineIdx in routine.startLine..routine.endLine.coerceAtMost(lines.size - 1)) {
+                                if (lineIdx >= 0 && lineIdx < lines.size) {
+                                    val line = lines[lineIdx]
+                                    if (line.contains(searchText, ignoreCase = true)) {
+                                        val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
+                                        count += regex.findAll(line).count()
+                                        lines[lineIdx] = line.replace(searchText, replaceText, ignoreCase = true)
+                                    }
                                 }
                             }
                         }
+                        
+                        content = lines.joinToString("\n")
                     }
-                    
-                    content = lines.joinToString("\n")
                 }
-            }
-            "module" -> {
-                // Replace only in selected modules
-                if (selectedModules != null && selectedModules.isNotEmpty()) {
-                    val lines = content.lines().toMutableList()
-                    
-                    for (module in selectedModules) {
-                        for (lineIdx in module.startLine..module.endLine.coerceAtMost(lines.size - 1)) {
-                            if (lineIdx < lines.size) {
-                                val line = lines[lineIdx]
-                                if (line.contains(searchText, ignoreCase = true)) {
-                                    val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
-                                    count += regex.findAll(line).count()
-                                    lines[lineIdx] = line.replace(searchText, replaceText, ignoreCase = true)
+                "module" -> {
+                    // Replace only in selected modules
+                    if (selectedModules != null && selectedModules.isNotEmpty()) {
+                        val lines = content.lines().toMutableList()
+                        
+                        for (module in selectedModules) {
+                            for (lineIdx in module.startLine..module.endLine.coerceAtMost(lines.size - 1)) {
+                                if (lineIdx >= 0 && lineIdx < lines.size) {
+                                    val line = lines[lineIdx]
+                                    if (line.contains(searchText, ignoreCase = true)) {
+                                        val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
+                                        count += regex.findAll(line).count()
+                                        lines[lineIdx] = line.replace(searchText, replaceText, ignoreCase = true)
+                                    }
                                 }
                             }
                         }
+                        
+                        content = lines.joinToString("\n")
                     }
-                    
-                    content = lines.joinToString("\n")
                 }
             }
+            
+            fileContent = content
+            hasUnsavedChanges = true
+            
+            if (isEditMode) {
+                etCodeContent.setText(content)
+            } else {
+                displayContent()
+            }
+            
+            Toast.makeText(this, getString(R.string.replaced_count, count), Toast.LENGTH_SHORT).show()
+        } catch (e: OutOfMemoryError) {
+            android.util.Log.e("CodeViewerActivity", "Out of memory replacing code", e)
+            Toast.makeText(
+                this,
+                "内存不足，无法执行替换操作",
+                Toast.LENGTH_LONG
+            ).show()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error replacing code", e)
+            Toast.makeText(
+                this,
+                "替换操作失败",
+                Toast.LENGTH_SHORT
+            ).show()
         }
-        
-        fileContent = content
-        hasUnsavedChanges = true
-        
-        if (isEditMode) {
-            etCodeContent.setText(content)
-        } else {
-            displayContent()
-        }
-        
-        Toast.makeText(this, getString(R.string.replaced_count, count), Toast.LENGTH_SHORT).show()
     }
 
     private fun searchCode(query: String) {
-        currentSearchQuery = query
-        if (query.isEmpty()) {
-            displayContent()
-            return
-        }
-        
-        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val lines = content.lines()
-        val results = mutableListOf<SearchResultAdapter.SearchResult>()
-        
-        lines.forEachIndexed { index, line ->
-            if (line.contains(query, ignoreCase = true)) {
-                val startIndex = line.indexOf(query, ignoreCase = true)
-                results.add(
-                    SearchResultAdapter.SearchResult(
-                        lineNumber = index + 1,
-                        lineContent = line,
-                        startIndex = startIndex,
-                        endIndex = startIndex + query.length
-                    )
-                )
+        try {
+            currentSearchQuery = query
+            if (query.isEmpty()) {
+                displayContent()
+                return
             }
-        }
-        
-        if (results.isEmpty()) {
-            Toast.makeText(this, getString(R.string.no_matches_found), Toast.LENGTH_SHORT).show()
-        } else {
-            showSearchResultsDialog(results, query)
+            
+            val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+            val lines = content.lines()
+            
+            // Limit search for large files
+            if (lines.size > 50000) {
+                Toast.makeText(
+                    this,
+                    "文件过大 (${lines.size} 行)，搜索可能较慢",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            
+            val results = mutableListOf<SearchResultAdapter.SearchResult>()
+            
+            lines.forEachIndexed { index, line ->
+                if (line.contains(query, ignoreCase = true)) {
+                    val startIndex = line.indexOf(query, ignoreCase = true)
+                    results.add(
+                        SearchResultAdapter.SearchResult(
+                            lineNumber = index + 1,
+                            lineContent = line,
+                            startIndex = startIndex,
+                            endIndex = startIndex + query.length
+                        )
+                    )
+                }
+            }
+            
+            if (results.isEmpty()) {
+                Toast.makeText(this, getString(R.string.no_matches_found), Toast.LENGTH_SHORT).show()
+            } else {
+                showSearchResultsDialog(results, query)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error searching code", e)
+            Toast.makeText(
+                this,
+                "搜索失败",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
     
@@ -1054,41 +1131,67 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun formatCode() {
-        var content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        
-        // Simple code formatting: fix indentation
-        val lines = content.lines()
-        val formatted = StringBuilder()
-        var indentLevel = 0
-        
-        lines.forEach { line ->
-            val trimmed = line.trim()
+        try {
+            var content = if (isEditMode) etCodeContent.text.toString() else fileContent
             
-            // Decrease indent for end keywords
-            if (trimmed.matches(Regex("^(ENDMODULE|ENDPROC|ENDFUNC|ENDTRAP|ENDIF|ENDFOR|ENDWHILE|ENDTEST).*", RegexOption.IGNORE_CASE))) {
-                indentLevel = maxOf(0, indentLevel - 1)
+            // Check content size
+            if (content.length > MAX_FILE_SIZE_BYTES) {
+                Toast.makeText(
+                    this,
+                    "文件过大，无法格式化",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
             }
             
-            // Add indented line
-            val indent = "    ".repeat(indentLevel)
-            formatted.append(indent).append(trimmed).append("\n")
+            // Simple code formatting: fix indentation
+            val lines = content.lines()
+            val formatted = StringBuilder()
+            var indentLevel = 0
             
-            // Increase indent for start keywords
-            if (trimmed.matches(Regex("^(MODULE|PROC|FUNC|TRAP|IF .+ THEN|FOR .+ DO|WHILE .+ DO|TEST .+).*", RegexOption.IGNORE_CASE))) {
-                indentLevel++
+            lines.forEach { line ->
+                val trimmed = line.trim()
+                
+                // Decrease indent for end keywords
+                if (trimmed.matches(Regex("^(ENDMODULE|ENDPROC|ENDFUNC|ENDTRAP|ENDIF|ENDFOR|ENDWHILE|ENDTEST).*", RegexOption.IGNORE_CASE))) {
+                    indentLevel = maxOf(0, indentLevel - 1)
+                }
+                
+                // Add indented line
+                val indent = "    ".repeat(indentLevel)
+                formatted.append(indent).append(trimmed).append("\n")
+                
+                // Increase indent for start keywords
+                if (trimmed.matches(Regex("^(MODULE|PROC|FUNC|TRAP|IF .+ THEN|FOR .+ DO|WHILE .+ DO|TEST .+).*", RegexOption.IGNORE_CASE))) {
+                    indentLevel++
+                }
             }
+            
+            fileContent = formatted.toString()
+            hasUnsavedChanges = true
+            
+            if (isEditMode) {
+                etCodeContent.setText(fileContent)
+            } else {
+                displayContent()
+            }
+            
+            Toast.makeText(this, getString(R.string.code_formatted), Toast.LENGTH_SHORT).show()
+        } catch (e: OutOfMemoryError) {
+            android.util.Log.e("CodeViewerActivity", "Out of memory formatting code", e)
+            Toast.makeText(
+                this,
+                "内存不足，无法格式化代码",
+                Toast.LENGTH_LONG
+            ).show()
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error formatting code", e)
+            Toast.makeText(
+                this,
+                "格式化代码失败",
+                Toast.LENGTH_SHORT
+            ).show()
         }
-        
-        fileContent = formatted.toString()
-        hasUnsavedChanges = true
-        
-        if (isEditMode) {
-            etCodeContent.setText(fileContent)
-        } else {
-            displayContent()
-        }
-        
-        Toast.makeText(this, getString(R.string.code_formatted), Toast.LENGTH_SHORT).show()
     }
 
     private fun toggleTheme() {
@@ -1117,13 +1220,33 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun checkSyntax() {
-        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val errors = abbParser.validateSyntax(content)
-        
-        if (errors.isEmpty()) {
-            Toast.makeText(this, getString(R.string.no_syntax_errors), Toast.LENGTH_SHORT).show()
-        } else {
-            showSyntaxErrorsDialog(errors)
+        try {
+            val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+            
+            // Check content size
+            if (content.length > MAX_FILE_SIZE_BYTES) {
+                Toast.makeText(
+                    this,
+                    "文件过大，无法进行语法检查",
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
+            }
+            
+            val errors = abbParser.validateSyntax(content)
+            
+            if (errors.isEmpty()) {
+                Toast.makeText(this, getString(R.string.no_syntax_errors), Toast.LENGTH_SHORT).show()
+            } else {
+                showSyntaxErrorsDialog(errors)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error checking syntax", e)
+            Toast.makeText(
+                this,
+                "语法检查失败",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
     
