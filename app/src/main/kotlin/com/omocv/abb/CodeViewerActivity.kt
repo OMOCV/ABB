@@ -757,39 +757,25 @@ class CodeViewerActivity : AppCompatActivity() {
             }
             
             if (isEditMode) {
-                // Find the first non-whitespace character on the line for better cursor visibility
+                // Highlight the line using the unified method FIRST
+                // This ensures background highlighting is visible before cursor placement
+                highlightLine(lineNumber)
+                
+                // Find the first non-whitespace character on the line for cursor placement
                 val currentLine = lines[lineNumber - 1]
                 val firstNonWhitespace = currentLine.indexOfFirst { !it.isWhitespace() }
-                val selectionStart = if (firstNonWhitespace >= 0) {
+                val cursorPosition = if (firstNonWhitespace >= 0) {
                     charPosition + firstNonWhitespace
                 } else {
                     charPosition
                 }
                 
-                // Select to the end of the first word or at least a few characters for visibility
-                val wordEnd = if (firstNonWhitespace >= 0) {
-                    currentLine.substring(firstNonWhitespace).indexOfFirst { it.isWhitespace() }.let { idx ->
-                        if (idx >= 0) firstNonWhitespace + idx else -1
-                    }
-                } else {
-                    -1
-                }
-                val selectionEnd = if (wordEnd > firstNonWhitespace) {
-                    charPosition + wordEnd
-                } else {
-                    // Select the entire line if no word boundary found
-                    (charPosition + currentLine.length).coerceAtMost(etCodeContent.text?.length ?: 0)
-                }
-                
-                // Set selection range to make cursor position highly visible
+                // Place cursor at the start of the line without selecting text
+                // This allows the background color highlight to be fully visible
                 etCodeContent.setSelection(
-                    selectionStart.coerceAtMost(etCodeContent.text?.length ?: 0),
-                    selectionEnd.coerceAtMost(etCodeContent.text?.length ?: 0)
+                    cursorPosition.coerceAtMost(etCodeContent.text?.length ?: 0)
                 )
                 etCodeContent.requestFocus()
-                
-                // Highlight the line using the unified method
-                highlightLine(lineNumber)
                 
                 // Scroll to make the cursor visible
                 etCodeContent.post {
@@ -835,7 +821,7 @@ class CodeViewerActivity : AppCompatActivity() {
             
             // Use a more visible highlight color
             val highlightColor = if (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES) {
-                Color.parseColor("#555555") // Lighter gray for dark theme (more visible)
+                Color.parseColor("#4A4A00") // Yellow-tinted dark background for dark theme (more visible)
             } else {
                 Color.parseColor("#FFFF00") // Bright yellow for light theme (more visible)
             }
@@ -865,8 +851,8 @@ class CodeViewerActivity : AppCompatActivity() {
                 val finalSpannable = SpannableString(highlighted)
                 finalSpannable.setSpan(
                     BackgroundColorSpan(highlightColor),
-                    startPos,
-                    endPos.coerceAtMost(content.length),
+                    startPos.coerceAtMost(finalSpannable.length),
+                    endPos.coerceAtMost(finalSpannable.length),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
                 tvCodeContent.text = finalSpannable
