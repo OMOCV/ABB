@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private val syntaxHighlighter = ABBSyntaxHighlighter()
 
     private var currentProgramFile: ABBProgramFile? = null
+    private var currentFileUri: Uri? = null
 
     // File picker launcher - using OpenDocument for better permission support
     private val filePickerLauncher = registerForActivityResult(
@@ -355,8 +356,6 @@ class MainActivity : AppCompatActivity() {
     private fun openFolderBrowser() {
         Toast.makeText(this, getString(R.string.feature_coming_soon), Toast.LENGTH_SHORT).show()
     }
-    
-    private var currentFileUri: Uri? = null
 
     private fun displayRoutineContent(fullContent: String, routine: ABBRoutine) {
         val lines = fullContent.lines()
