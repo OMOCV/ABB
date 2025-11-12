@@ -72,6 +72,13 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
             }
         }
         
+        // Restore saved BackgroundColorSpan (for highlighting search results and errors)
+        for ((span, start, end) in savedSpans) {
+            if (start >= 0 && end <= editable.length) {
+                editable.setSpan(span, start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            }
+        }
+        
         // Restore cursor position
         if (cursorPosition >= 0 && cursorPosition <= editable.length) {
             setSelection(cursorPosition)
