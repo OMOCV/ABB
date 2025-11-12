@@ -1063,10 +1063,14 @@ class CodeViewerActivity : AppCompatActivity() {
                     // by SyntaxHighlightEditText during syntax highlighting
                     if (currentHighlightStartPos >= 0 && currentHighlightEndPos >= 0) {
                         try {
+                            // Clamp previous positions to current text length
+                            val safeStartPos = currentHighlightStartPos.coerceIn(0, editableContent.length)
+                            val safeEndPos = currentHighlightEndPos.coerceIn(0, editableContent.length)
+                            
                             // Find and remove any LineBackgroundSpan.Standard at the previous highlight position
                             val existingSpans = editableContent.getSpans(
-                                currentHighlightStartPos.coerceIn(0, editableContent.length),
-                                currentHighlightEndPos.coerceIn(0, editableContent.length),
+                                safeStartPos,
+                                safeEndPos,
                                 android.text.style.LineBackgroundSpan.Standard::class.java
                             )
                             for (span in existingSpans) {
@@ -1074,7 +1078,10 @@ class CodeViewerActivity : AppCompatActivity() {
                                     // Only remove if it's at the exact same position
                                     val spanStart = editableContent.getSpanStart(span)
                                     val spanEnd = editableContent.getSpanEnd(span)
-                                    if (spanStart == currentHighlightStartPos && spanEnd == currentHighlightEndPos) {
+                                    // Check if span is still attached (getSpanStart returns -1 if not attached)
+                                    if (spanStart >= 0 && spanEnd >= 0 && 
+                                        spanStart == currentHighlightStartPos && 
+                                        spanEnd == currentHighlightEndPos) {
                                         editableContent.removeSpan(span)
                                     }
                                 } catch (e: Exception) {
@@ -1136,17 +1143,24 @@ class CodeViewerActivity : AppCompatActivity() {
                 val content = etCodeContent.text
                 if (content is Spannable) {
                     try {
+                        // Clamp positions to current text length
+                        val safeStartPos = currentHighlightStartPos.coerceIn(0, content.length)
+                        val safeEndPos = currentHighlightEndPos.coerceIn(0, content.length)
+                        
                         // Find and remove any LineBackgroundSpan.Standard at the highlight position
                         val existingSpans = content.getSpans(
-                            currentHighlightStartPos.coerceIn(0, content.length),
-                            currentHighlightEndPos.coerceIn(0, content.length),
+                            safeStartPos,
+                            safeEndPos,
                             android.text.style.LineBackgroundSpan.Standard::class.java
                         )
                         for (span in existingSpans) {
                             try {
                                 val spanStart = content.getSpanStart(span)
                                 val spanEnd = content.getSpanEnd(span)
-                                if (spanStart == currentHighlightStartPos && spanEnd == currentHighlightEndPos) {
+                                // Check if span is still attached (getSpanStart returns -1 if not attached)
+                                if (spanStart >= 0 && spanEnd >= 0 &&
+                                    spanStart == currentHighlightStartPos && 
+                                    spanEnd == currentHighlightEndPos) {
                                     content.removeSpan(span)
                                 }
                             } catch (e: Exception) {
