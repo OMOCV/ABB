@@ -43,8 +43,9 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
         // Save any BackgroundColorSpan (used for highlighting search results and errors)
         val backgroundSpans = editable.getSpans(0, editable.length, android.text.style.BackgroundColorSpan::class.java)
         val savedSpans = backgroundSpans.map { span ->
+            // Extract the color from the span to create a new one later
             Triple(
-                span,
+                (span as android.text.style.BackgroundColorSpan).backgroundColor,
                 editable.getSpanStart(span),
                 editable.getSpanEnd(span)
             )
@@ -71,9 +72,15 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
         }
         
         // Restore saved BackgroundColorSpan (for highlighting search results and errors)
-        for ((span, start, end) in savedSpans) {
+        // Create NEW spans with the saved color values instead of reusing the old span objects
+        for ((color, start, end) in savedSpans) {
             if (start >= 0 && end <= editable.length) {
-                editable.setSpan(span, start, end, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                editable.setSpan(
+                    android.text.style.BackgroundColorSpan(color),
+                    start,
+                    end,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
             }
         }
         
