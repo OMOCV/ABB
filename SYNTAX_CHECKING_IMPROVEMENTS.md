@@ -282,15 +282,19 @@ ENDPROC                 ! 没有对应的 PROC
 
 #### 特殊语法错误 (Special Syntax Errors)
 
-##### 不应使用分号
-```rapid
-! 错误示例 / Error Example:
-x := 10;                ! RAPID 不使用分号
+##### ~~不应使用分号~~ (已修正 - Fixed)
+**注意：** 此检查已被移除。RAPID 语言在以下情况下使用分号：
+- 变量声明（VAR、PERS、CONST）
+- 在同一行上分隔多个语句
+- 某些指令（运动指令、函数调用等）
+因此，分号的存在并不表示错误，需要根据具体上下文判断。
 
-! 错误消息 / Error Message:
-第 X 行，第 Y 列：语句末尾不应有分号 - RAPID 语言不使用分号结束语句
-建议：删除分号，RAPID 语句通过换行自动结束
-```
+**Note:** This check has been removed. RAPID language DOES use semicolons for:
+- Variable declarations (VAR, PERS, CONST)
+- Separating multiple statements on one line
+- Certain instructions (motion instructions, function calls, etc.)
+Therefore, the presence of a semicolon does not indicate an error; it depends on the specific context.
+
 
 ##### FUNC 中 RETURN 缺少返回值
 ```rapid
@@ -454,7 +458,7 @@ private fun removeStringsAndComments(line: String): String {
 9. ✅ WHILE 缺少 DO
 10. ✅ FOR 缺少 TO
 11. ✅ 未闭合的方括号
-12. ✅ 不应使用分号
+12. ~~✅ 不应使用分号~~ (已修正：分号在 RAPID 中是有效的 - Fixed: Semicolons are valid in RAPID)
 13. ✅ 不完整的变量声明
 14. ✅ 不完整的 MODULE 声明
 15. ✅ 未闭合的 PROC 块
