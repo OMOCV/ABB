@@ -219,7 +219,7 @@ class ABBParser {
     }
     
     /**
-     * Comprehensive syntax validation for RAPID code
+     * Comprehensive syntax validation for RAPID code with Chinese error messages
      */
     fun validateSyntax(content: String): List<SyntaxError> {
         val errors = mutableListOf<SyntaxError>()
@@ -238,6 +238,101 @@ class ABBParser {
                 return@forEachIndexed
             }
             
+            // First, check for unclosed strings (highest priority to avoid false positives)
+            val stringQuoteCount = line.count { it == '"' }
+            if (stringQuoteCount % 2 != 0) {
+                // Find the position of the unclosed quote
+                var lastQuotePos = -1
+                var inString = false
+                for (i in line.indices) {
+                    if (line[i] == '"') {
+                        lastQuotePos = i
+                        inString = !inString
+                    }
+                }
+                if (inString && lastQuotePos >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "第 $lineNumber 行，第 ${lastQuotePos + 1} 列：字符串未闭合 - 缺少结束引号\n建议：在字符串末尾添加双引号 \"",
+                        lastQuotePos,
+                        line.length
+                    ))
+                    return@forEachIndexed // Skip further checks on this line
+                }
+            }
+            
+            // Check for unmatched parentheses, brackets, and braces (excluding comments and strings)
+            val lineWithoutStringsAndComments = removeStringsAndComments(line)
+            val parenCount = lineWithoutStringsAndComments.count { it == '(' } - lineWithoutStringsAndComments.count { it == ')' }
+            val bracketCount = lineWithoutStringsAndComments.count { it == '[' } - lineWithoutStringsAndComments.count { it == ']' }
+            val braceCount = lineWithoutStringsAndComments.count { it == '{' } - lineWithoutStringsAndComments.count { it == '}' }
+            
+            if (parenCount > 0) {
+                val lastOpenParen = lineWithoutStringsAndComments.lastIndexOf('(')
+                if (lastOpenParen >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "第 $lineNumber 行，第 ${lastOpenParen + 1} 列：左括号未闭合 - 缺少匹配的右括号\n建议：在语句末尾或适当位置添加 )",
+                        lastOpenParen,
+                        lastOpenParen + 1
+                    ))
+                }
+            } else if (parenCount < 0) {
+                val firstCloseParen = lineWithoutStringsAndComments.indexOf(')')
+                if (firstCloseParen >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "第 $lineNumber 行，第 ${firstCloseParen + 1} 列：右括号多余 - 没有匹配的左括号\n建议：删除此右括号或在前面添加左括号 (",
+                        firstCloseParen,
+                        firstCloseParen + 1
+                    ))
+                }
+            }
+            
+            if (bracketCount > 0) {
+                val lastOpenBracket = lineWithoutStringsAndComments.lastIndexOf('[')
+                if (lastOpenBracket >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "第 $lineNumber 行，第 ${lastOpenBracket + 1} 列：左方括号未闭合 - 缺少匹配的右方括号\n建议：在数组索引或列表末尾添加 ]",
+                        lastOpenBracket,
+                        lastOpenBracket + 1
+                    ))
+                }
+            } else if (bracketCount < 0) {
+                val firstCloseBracket = lineWithoutStringsAndComments.indexOf(']')
+                if (firstCloseBracket >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "第 $lineNumber 行，第 ${firstCloseBracket + 1} 列：右方括号多余 - 没有匹配的左方括号\n建议：删除此右方括号或在前面添加左方括号 [",
+                        firstCloseBracket,
+                        firstCloseBracket + 1
+                    ))
+                }
+            }
+            
+            if (braceCount > 0) {
+                val lastOpenBrace = lineWithoutStringsAndComments.lastIndexOf('{')
+                if (lastOpenBrace >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "第 $lineNumber 行，第 ${lastOpenBrace + 1} 列：左花括号未闭合 - 缺少匹配的右花括号\n建议：在数据结构末尾添加 }",
+                        lastOpenBrace,
+                        lastOpenBrace + 1
+                    ))
+                }
+            } else if (braceCount < 0) {
+                val firstCloseBrace = lineWithoutStringsAndComments.indexOf('}')
+                if (firstCloseBrace >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "第 $lineNumber 行，第 ${firstCloseBrace + 1} 列：右花括号多余 - 没有匹配的左花括号\n建议：删除此右花括号或在前面添加左花括号 {",
+                        firstCloseBrace,
+                        firstCloseBrace + 1
+                    ))
+                }
+            }
+            
             // Check MODULE/ENDMODULE matching
             when {
                 trimmed.matches(Regex("^MODULE\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
@@ -251,7 +346,7 @@ class ABBParser {
                     if (blockStack.isEmpty()) {
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDMODULE at line $lineNumber, column ${columnStart + 1} without any open block - missing MODULE declaration",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDMODULE 没有对应的开始块 - 缺少 MODULE 声明\n建议：在文件开头添加 MODULE 模块名",
                             columnStart,
                             columnEnd
                         ))
@@ -259,7 +354,7 @@ class ABBParser {
                         val openBlock = blockStack.last()
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDMODULE at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDMODULE 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDMODULE",
                             columnStart,
                             columnEnd
                         ))
@@ -278,7 +373,7 @@ class ABBParser {
                     if (blockStack.isEmpty()) {
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDPROC at line $lineNumber, column ${columnStart + 1} without any open block - missing PROC declaration",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDPROC 没有对应的开始块 - 缺少 PROC 声明\n建议：在此之前添加 PROC 过程名()",
                             columnStart,
                             columnEnd
                         ))
@@ -286,7 +381,7 @@ class ABBParser {
                         val openBlock = blockStack.last()
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDPROC at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDPROC 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDPROC",
                             columnStart,
                             columnEnd
                         ))
@@ -305,7 +400,7 @@ class ABBParser {
                     if (blockStack.isEmpty()) {
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDFUNC at line $lineNumber, column ${columnStart + 1} without any open block - missing FUNC declaration",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDFUNC 没有对应的开始块 - 缺少 FUNC 声明\n建议：在此之前添加 FUNC 返回类型 函数名()",
                             columnStart,
                             columnEnd
                         ))
@@ -313,7 +408,7 @@ class ABBParser {
                         val openBlock = blockStack.last()
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDFUNC at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDFUNC 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDFUNC",
                             columnStart,
                             columnEnd
                         ))
@@ -332,7 +427,7 @@ class ABBParser {
                     if (blockStack.isEmpty()) {
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDTRAP at line $lineNumber, column ${columnStart + 1} without any open block - missing TRAP declaration",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDTRAP 没有对应的开始块 - 缺少 TRAP 声明\n建议：在此之前添加 TRAP 陷阱名",
                             columnStart,
                             columnEnd
                         ))
@@ -340,7 +435,7 @@ class ABBParser {
                         val openBlock = blockStack.last()
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDTRAP at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDTRAP 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDTRAP",
                             columnStart,
                             columnEnd
                         ))
@@ -359,7 +454,7 @@ class ABBParser {
                     if (blockStack.isEmpty()) {
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDIF at line $lineNumber, column ${columnStart + 1} without any open block - missing IF statement",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDIF 没有对应的开始块 - 缺少 IF 语句\n建议：在此之前添加 IF 条件 THEN",
                             columnStart,
                             columnEnd
                         ))
@@ -367,7 +462,7 @@ class ABBParser {
                         val openBlock = blockStack.last()
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDIF at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDIF 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDIF",
                             columnStart,
                             columnEnd
                         ))
@@ -386,7 +481,7 @@ class ABBParser {
                     if (blockStack.isEmpty()) {
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDFOR at line $lineNumber, column ${columnStart + 1} without any open block - missing FOR loop",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDFOR 没有对应的开始块 - 缺少 FOR 循环\n建议：在此之前添加 FOR 变量 FROM 起始值 TO 结束值 DO",
                             columnStart,
                             columnEnd
                         ))
@@ -394,7 +489,7 @@ class ABBParser {
                         val openBlock = blockStack.last()
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDFOR at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDFOR 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDFOR",
                             columnStart,
                             columnEnd
                         ))
@@ -413,7 +508,7 @@ class ABBParser {
                     if (blockStack.isEmpty()) {
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDWHILE at line $lineNumber, column ${columnStart + 1} without any open block - missing WHILE loop",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDWHILE 没有对应的开始块 - 缺少 WHILE 循环\n建议：在此之前添加 WHILE 条件 DO",
                             columnStart,
                             columnEnd
                         ))
@@ -421,7 +516,7 @@ class ABBParser {
                         val openBlock = blockStack.last()
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDWHILE at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDWHILE 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDWHILE",
                             columnStart,
                             columnEnd
                         ))
@@ -440,7 +535,7 @@ class ABBParser {
                     if (blockStack.isEmpty()) {
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDTEST at line $lineNumber, column ${columnStart + 1} without any open block - missing TEST statement",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDTEST 没有对应的开始块 - 缺少 TEST 语句\n建议：在此之前添加 TEST 表达式",
                             columnStart,
                             columnEnd
                         ))
@@ -448,7 +543,7 @@ class ABBParser {
                         val openBlock = blockStack.last()
                         errors.add(SyntaxError(
                             lineNumber, 
-                            "ENDTEST at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDTEST 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDTEST",
                             columnStart,
                             columnEnd
                         ))
@@ -458,31 +553,64 @@ class ABBParser {
                 }
             }
             
-            // Check for invalid syntax patterns (but be lenient)
+            // Check for invalid syntax patterns (enhanced validation)
+            
+            // Check for incomplete or invalid assignment statements
             if (trimmed.contains(":=")) {
-                // Check assignment statement has valid variable name
                 val parts = trimmed.split(":=")
                 if (parts.size >= 2) {
-                    val varPart = parts[0].trim()
-                    // Get the last token which should be the variable name
-                    val tokens = varPart.split(Regex("\\s+"))
-                    if (tokens.isNotEmpty()) {
-                        val varName = tokens.last()
-                        // Allow array access, field access, but check basic variable pattern
-                        val cleanVarName = varName.split(Regex("[.\\[{]")).first()
-                        if (cleanVarName.isNotEmpty() && !cleanVarName.matches(Regex("^[a-zA-Z_][a-zA-Z0-9_]*$"))) {
-                            // Find the position of the variable name in the original line
-                            val varIndex = line.indexOf(cleanVarName)
-                            val columnStart = if (varIndex >= 0) varIndex else 0
-                            val columnEnd = if (varIndex >= 0) varIndex + cleanVarName.length else 0
-                            errors.add(SyntaxError(
-                                lineNumber, 
-                                "Invalid variable name '$cleanVarName' at line $lineNumber, column ${columnStart + 1}",
-                                columnStart,
-                                columnEnd
-                            ))
+                    val leftPart = parts[0].trim()
+                    val rightPart = parts[1].trim()
+                    
+                    // Check if left side is empty or invalid
+                    if (leftPart.isEmpty()) {
+                        val colonPos = line.indexOf(":=")
+                        errors.add(SyntaxError(
+                            lineNumber,
+                            "第 $lineNumber 行，第 ${colonPos + 1} 列：赋值语句左侧缺少变量名\n建议：在 := 前添加变量名，例如：变量名 := 值",
+                            colonPos,
+                            colonPos + 2
+                        ))
+                    } else {
+                        // Get the last token which should be the variable name
+                        val tokens = leftPart.split(Regex("\\s+"))
+                        if (tokens.isNotEmpty()) {
+                            val varName = tokens.last()
+                            // Allow array access, field access, but check basic variable pattern
+                            val cleanVarName = varName.split(Regex("[.\\[{]")).first()
+                            if (cleanVarName.isNotEmpty() && !cleanVarName.matches(Regex("^[a-zA-Z_][a-zA-Z0-9_]*$"))) {
+                                val varIndex = line.indexOf(cleanVarName)
+                                val columnStart = if (varIndex >= 0) varIndex else 0
+                                val columnEnd = if (varIndex >= 0) varIndex + cleanVarName.length else 0
+                                errors.add(SyntaxError(
+                                    lineNumber, 
+                                    "第 $lineNumber 行，第 ${columnStart + 1} 列：无效的变量名 '$cleanVarName'\n建议：变量名必须以字母或下划线开头，只能包含字母、数字和下划线",
+                                    columnStart,
+                                    columnEnd
+                                ))
+                            }
                         }
                     }
+                    
+                    // Check if right side is empty
+                    if (rightPart.isEmpty()) {
+                        val colonPos = line.indexOf(":=")
+                        errors.add(SyntaxError(
+                            lineNumber,
+                            "第 $lineNumber 行，第 ${colonPos + 3} 列：赋值语句右侧缺少表达式\n建议：在 := 后添加要赋的值或表达式",
+                            colonPos + 2,
+                            line.length
+                        ))
+                    }
+                } else {
+                    // Assignment operator at the end of the line
+                    val colonPos = line.indexOf(":=")
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "第 $lineNumber 行，第 ${colonPos + 1} 列：赋值语句不完整 - 缺少右侧表达式\n建议：在 := 后添加要赋的值",
+                        colonPos,
+                        line.length
+                    ))
                 }
             }
             
@@ -492,7 +620,7 @@ class ABBParser {
                 val columnStart = line.indexOf("IF", ignoreCase = true)
                 errors.add(SyntaxError(
                     lineNumber,
-                    "IF statement at line $lineNumber, column ${columnStart + 1} is missing THEN keyword",
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：IF 语句缺少 THEN 关键字\n建议：在条件表达式后添加 THEN，格式：IF 条件 THEN",
                     columnStart,
                     line.length
                 ))
@@ -504,7 +632,7 @@ class ABBParser {
                 val columnStart = line.indexOf("WHILE", ignoreCase = true)
                 errors.add(SyntaxError(
                     lineNumber,
-                    "WHILE loop at line $lineNumber, column ${columnStart + 1} is missing DO keyword",
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：WHILE 循环缺少 DO 关键字\n建议：在条件表达式后添加 DO，格式：WHILE 条件 DO",
                     columnStart,
                     line.length
                 ))
@@ -516,7 +644,7 @@ class ABBParser {
                     val columnStart = line.indexOf("FOR", ignoreCase = true)
                     errors.add(SyntaxError(
                         lineNumber,
-                        "FOR loop at line $lineNumber, column ${columnStart + 1} is missing TO keyword",
+                        "第 $lineNumber 行，第 ${columnStart + 1} 列：FOR 循环缺少 TO 关键字\n建议：指定循环结束值，格式：FOR 变量 FROM 起始值 TO 结束值 DO",
                         columnStart,
                         line.length
                     ))
@@ -524,103 +652,9 @@ class ABBParser {
                     val columnStart = line.indexOf("FOR", ignoreCase = true)
                     errors.add(SyntaxError(
                         lineNumber,
-                        "FOR loop at line $lineNumber, column ${columnStart + 1} is missing DO keyword",
+                        "第 $lineNumber 行，第 ${columnStart + 1} 列：FOR 循环缺少 DO 关键字\n建议：在循环范围后添加 DO，格式：FOR 变量 FROM 起始值 TO 结束值 DO",
                         columnStart,
                         line.length
-                    ))
-                }
-            }
-            
-            // Check for unclosed strings
-            val stringQuoteCount = line.count { it == '"' }
-            if (stringQuoteCount % 2 != 0) {
-                // Find the position of the unclosed quote
-                var lastQuotePos = -1
-                var inString = false
-                for (i in line.indices) {
-                    if (line[i] == '"') {
-                        lastQuotePos = i
-                        inString = !inString
-                    }
-                }
-                if (inString && lastQuotePos >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "Unclosed string at line $lineNumber, column ${lastQuotePos + 1}",
-                        lastQuotePos,
-                        line.length
-                    ))
-                }
-            }
-            
-            // Check for unmatched parentheses, brackets, and braces (excluding comments and strings)
-            val lineWithoutStringsAndComments = removeStringsAndComments(line)
-            val parenCount = lineWithoutStringsAndComments.count { it == '(' } - lineWithoutStringsAndComments.count { it == ')' }
-            val bracketCount = lineWithoutStringsAndComments.count { it == '[' } - lineWithoutStringsAndComments.count { it == ']' }
-            val braceCount = lineWithoutStringsAndComments.count { it == '{' } - lineWithoutStringsAndComments.count { it == '}' }
-            
-            if (parenCount > 0) {
-                val lastOpenParen = lineWithoutStringsAndComments.lastIndexOf('(')
-                if (lastOpenParen >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "Unclosed parenthesis at line $lineNumber, column ${lastOpenParen + 1}",
-                        lastOpenParen,
-                        lastOpenParen + 1
-                    ))
-                }
-            } else if (parenCount < 0) {
-                val firstCloseParen = lineWithoutStringsAndComments.indexOf(')')
-                if (firstCloseParen >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "Unmatched closing parenthesis at line $lineNumber, column ${firstCloseParen + 1}",
-                        firstCloseParen,
-                        firstCloseParen + 1
-                    ))
-                }
-            }
-            
-            if (bracketCount > 0) {
-                val lastOpenBracket = lineWithoutStringsAndComments.lastIndexOf('[')
-                if (lastOpenBracket >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "Unclosed bracket at line $lineNumber, column ${lastOpenBracket + 1}",
-                        lastOpenBracket,
-                        lastOpenBracket + 1
-                    ))
-                }
-            } else if (bracketCount < 0) {
-                val firstCloseBracket = lineWithoutStringsAndComments.indexOf(']')
-                if (firstCloseBracket >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "Unmatched closing bracket at line $lineNumber, column ${firstCloseBracket + 1}",
-                        firstCloseBracket,
-                        firstCloseBracket + 1
-                    ))
-                }
-            }
-            
-            if (braceCount > 0) {
-                val lastOpenBrace = lineWithoutStringsAndComments.lastIndexOf('{')
-                if (lastOpenBrace >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "Unclosed brace at line $lineNumber, column ${lastOpenBrace + 1}",
-                        lastOpenBrace,
-                        lastOpenBrace + 1
-                    ))
-                }
-            } else if (braceCount < 0) {
-                val firstCloseBrace = lineWithoutStringsAndComments.indexOf('}')
-                if (firstCloseBrace >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "Unmatched closing brace at line $lineNumber, column ${firstCloseBrace + 1}",
-                        firstCloseBrace,
-                        firstCloseBrace + 1
                     ))
                 }
             }
@@ -631,7 +665,7 @@ class ABBParser {
                 if (semicolonPos >= 0) {
                     errors.add(SyntaxError(
                         lineNumber,
-                        "Unexpected semicolon at line $lineNumber, column ${semicolonPos + 1} - RAPID does not use semicolons for statement termination",
+                        "第 $lineNumber 行，第 ${semicolonPos + 1} 列：语句末尾不应有分号 - RAPID 语言不使用分号结束语句\n建议：删除分号，RAPID 语句通过换行自动结束",
                         semicolonPos,
                         semicolonPos + 1
                     ))
@@ -643,18 +677,25 @@ class ABBParser {
                 val columnStart = line.indexOf("PROC", ignoreCase = true)
                 errors.add(SyntaxError(
                     lineNumber,
-                    "Incomplete PROC declaration at line $lineNumber, column ${columnStart + 1} - missing procedure name",
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：PROC 声明不完整 - 缺少过程名称\n建议：添加过程名称和参数，格式：PROC 过程名(参数列表)",
                     columnStart,
                     line.length
                 ))
             }
             
-            if (trimmed.matches(Regex("^FUNC\\s*$", RegexOption.IGNORE_CASE)) || 
-                trimmed.matches(Regex("^FUNC\\s+\\w+\\s*$", RegexOption.IGNORE_CASE))) {
+            if (trimmed.matches(Regex("^FUNC\\s*$", RegexOption.IGNORE_CASE))) {
                 val columnStart = line.indexOf("FUNC", ignoreCase = true)
                 errors.add(SyntaxError(
                     lineNumber,
-                    "Incomplete FUNC declaration at line $lineNumber, column ${columnStart + 1} - missing return type or function name",
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：FUNC 声明不完整 - 缺少返回类型和函数名\n建议：格式：FUNC 返回类型 函数名(参数列表)，例如：FUNC num GetValue()",
+                    columnStart,
+                    line.length
+                ))
+            } else if (trimmed.matches(Regex("^FUNC\\s+\\w+\\s*$", RegexOption.IGNORE_CASE))) {
+                val columnStart = line.indexOf("FUNC", ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：FUNC 声明不完整 - 缺少函数名\n建议：在返回类型后添加函数名，格式：FUNC 返回类型 函数名(参数列表)",
                     columnStart,
                     line.length
                 ))
@@ -664,7 +705,7 @@ class ABBParser {
                 val columnStart = line.indexOf("TRAP", ignoreCase = true)
                 errors.add(SyntaxError(
                     lineNumber,
-                    "Incomplete TRAP declaration at line $lineNumber, column ${columnStart + 1} - missing trap routine name",
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：TRAP 声明不完整 - 缺少陷阱例程名称\n建议：添加陷阱例程名称，格式：TRAP 陷阱名",
                     columnStart,
                     line.length
                 ))
@@ -675,7 +716,7 @@ class ABBParser {
                 val columnStart = line.indexOf("MODULE", ignoreCase = true)
                 errors.add(SyntaxError(
                     lineNumber,
-                    "Incomplete MODULE declaration at line $lineNumber, column ${columnStart + 1} - missing module name",
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：MODULE 声明不完整 - 缺少模块名称\n建议：添加模块名称，格式：MODULE 模块名",
                     columnStart,
                     line.length
                 ))
@@ -689,24 +730,48 @@ class ABBParser {
                 if (inFunc) {
                     errors.add(SyntaxError(
                         lineNumber,
-                        "RETURN statement at line $lineNumber, column ${columnStart + 1} is missing return value - FUNC requires a return value",
+                        "第 $lineNumber 行，第 ${columnStart + 1} 列：RETURN 语句缺少返回值 - FUNC 函数必须返回一个值\n建议：在 RETURN 后添加返回值，格式：RETURN 表达式",
                         columnStart,
                         line.length
                     ))
                 }
             }
             
-            // Check for VAR/PERS/CONST without variable name
-            if (trimmed.matches(Regex("^(VAR|PERS|CONST)\\s*$", RegexOption.IGNORE_CASE)) ||
-                trimmed.matches(Regex("^(VAR|PERS|CONST)\\s+\\w+\\s*$", RegexOption.IGNORE_CASE))) {
+            // Check for VAR/PERS/CONST without variable name or type
+            if (trimmed.matches(Regex("^(VAR|PERS|CONST)\\s*$", RegexOption.IGNORE_CASE))) {
                 val match = Regex("^(VAR|PERS|CONST)", RegexOption.IGNORE_CASE).find(trimmed)
                 if (match != null) {
                     val keyword = match.value
                     val columnStart = line.indexOf(keyword, ignoreCase = true)
                     errors.add(SyntaxError(
                         lineNumber,
-                        "Incomplete variable declaration at line $lineNumber, column ${columnStart + 1} - missing variable name or type",
+                        "第 $lineNumber 行，第 ${columnStart + 1} 列：变量声明不完整 - 缺少数据类型和变量名\n建议：格式：${keyword.uppercase()} 数据类型 变量名，例如：VAR num counter",
                         columnStart,
+                        line.length
+                    ))
+                }
+            } else if (trimmed.matches(Regex("^(VAR|PERS|CONST)\\s+\\w+\\s*$", RegexOption.IGNORE_CASE))) {
+                val match = Regex("^(VAR|PERS|CONST)", RegexOption.IGNORE_CASE).find(trimmed)
+                if (match != null) {
+                    val keyword = match.value
+                    val columnStart = line.indexOf(keyword, ignoreCase = true)
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "第 $lineNumber 行，第 ${columnStart + 1} 列：变量声明不完整 - 缺少变量名\n建议：在数据类型后添加变量名，格式：${keyword.uppercase()} 数据类型 变量名",
+                        columnStart,
+                        line.length
+                    ))
+                }
+            }
+            
+            // Check for incomplete function calls (function name followed by just opening paren at end of line)
+            if (trimmed.matches(Regex(".*\\w+\\s*\\(\\s*$"))) {
+                val openParenPos = trimmed.lastIndexOf('(')
+                if (openParenPos > 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "第 $lineNumber 行，第 ${openParenPos + 1} 列：函数调用不完整 - 参数列表和右括号缺失\n建议：补充参数并闭合括号，格式：函数名(参数1, 参数2)",
+                        openParenPos,
                         line.length
                     ))
                 }
@@ -715,7 +780,10 @@ class ABBParser {
         
         // Check for unclosed blocks - report with specific line numbers
         blockStack.forEach { block ->
-            errors.add(SyntaxError(block.lineNumber, "Unclosed ${block.type} block starting at line ${block.lineNumber} - missing END${block.type}"))
+            errors.add(SyntaxError(
+                block.lineNumber, 
+                "第 ${block.lineNumber} 行：${block.type} 代码块未闭合 - 缺少 END${block.type}\n建议：在代码块结束位置添加 END${block.type}"
+            ))
         }
         
         return errors
