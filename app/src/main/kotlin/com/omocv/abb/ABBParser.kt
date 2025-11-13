@@ -246,11 +246,23 @@ class ABBParser {
                 }
                 trimmed.matches(Regex("^ENDMODULE\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     endModuleCount++
+                    val columnStart = line.indexOf("ENDMODULE", ignoreCase = true)
+                    val columnEnd = columnStart + "ENDMODULE".length
                     if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(lineNumber, "ENDMODULE at line $lineNumber without any open block - missing MODULE declaration"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDMODULE at line $lineNumber, column ${columnStart + 1} without any open block - missing MODULE declaration",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else if (blockStack.last().type != "MODULE") {
                         val openBlock = blockStack.last()
-                        errors.add(SyntaxError(lineNumber, "ENDMODULE at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDMODULE at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -261,11 +273,23 @@ class ABBParser {
                     blockStack.add(BlockInfo("PROC", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDPROC\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                    val columnStart = line.indexOf("ENDPROC", ignoreCase = true)
+                    val columnEnd = columnStart + "ENDPROC".length
                     if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(lineNumber, "ENDPROC at line $lineNumber without any open block - missing PROC declaration"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDPROC at line $lineNumber, column ${columnStart + 1} without any open block - missing PROC declaration",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else if (blockStack.last().type != "PROC") {
                         val openBlock = blockStack.last()
-                        errors.add(SyntaxError(lineNumber, "ENDPROC at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDPROC at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -276,11 +300,23 @@ class ABBParser {
                     blockStack.add(BlockInfo("FUNC", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDFUNC\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                    val columnStart = line.indexOf("ENDFUNC", ignoreCase = true)
+                    val columnEnd = columnStart + "ENDFUNC".length
                     if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(lineNumber, "ENDFUNC at line $lineNumber without any open block - missing FUNC declaration"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDFUNC at line $lineNumber, column ${columnStart + 1} without any open block - missing FUNC declaration",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else if (blockStack.last().type != "FUNC") {
                         val openBlock = blockStack.last()
-                        errors.add(SyntaxError(lineNumber, "ENDFUNC at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDFUNC at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -291,11 +327,23 @@ class ABBParser {
                     blockStack.add(BlockInfo("TRAP", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDTRAP\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                    val columnStart = line.indexOf("ENDTRAP", ignoreCase = true)
+                    val columnEnd = columnStart + "ENDTRAP".length
                     if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(lineNumber, "ENDTRAP at line $lineNumber without any open block - missing TRAP declaration"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDTRAP at line $lineNumber, column ${columnStart + 1} without any open block - missing TRAP declaration",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else if (blockStack.last().type != "TRAP") {
                         val openBlock = blockStack.last()
-                        errors.add(SyntaxError(lineNumber, "ENDTRAP at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDTRAP at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -306,11 +354,23 @@ class ABBParser {
                     blockStack.add(BlockInfo("IF", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDIF\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                    val columnStart = line.indexOf("ENDIF", ignoreCase = true)
+                    val columnEnd = columnStart + "ENDIF".length
                     if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(lineNumber, "ENDIF at line $lineNumber without any open block - missing IF statement"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDIF at line $lineNumber, column ${columnStart + 1} without any open block - missing IF statement",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else if (blockStack.last().type != "IF") {
                         val openBlock = blockStack.last()
-                        errors.add(SyntaxError(lineNumber, "ENDIF at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDIF at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -321,11 +381,23 @@ class ABBParser {
                     blockStack.add(BlockInfo("FOR", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDFOR\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                    val columnStart = line.indexOf("ENDFOR", ignoreCase = true)
+                    val columnEnd = columnStart + "ENDFOR".length
                     if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(lineNumber, "ENDFOR at line $lineNumber without any open block - missing FOR loop"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDFOR at line $lineNumber, column ${columnStart + 1} without any open block - missing FOR loop",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else if (blockStack.last().type != "FOR") {
                         val openBlock = blockStack.last()
-                        errors.add(SyntaxError(lineNumber, "ENDFOR at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDFOR at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -336,11 +408,23 @@ class ABBParser {
                     blockStack.add(BlockInfo("WHILE", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDWHILE\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                    val columnStart = line.indexOf("ENDWHILE", ignoreCase = true)
+                    val columnEnd = columnStart + "ENDWHILE".length
                     if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(lineNumber, "ENDWHILE at line $lineNumber without any open block - missing WHILE loop"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDWHILE at line $lineNumber, column ${columnStart + 1} without any open block - missing WHILE loop",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else if (blockStack.last().type != "WHILE") {
                         val openBlock = blockStack.last()
-                        errors.add(SyntaxError(lineNumber, "ENDWHILE at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDWHILE at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -351,11 +435,23 @@ class ABBParser {
                     blockStack.add(BlockInfo("TEST", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDTEST\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                    val columnStart = line.indexOf("ENDTEST", ignoreCase = true)
+                    val columnEnd = columnStart + "ENDTEST".length
                     if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(lineNumber, "ENDTEST at line $lineNumber without any open block - missing TEST statement"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDTEST at line $lineNumber, column ${columnStart + 1} without any open block - missing TEST statement",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else if (blockStack.last().type != "TEST") {
                         val openBlock = blockStack.last()
-                        errors.add(SyntaxError(lineNumber, "ENDTEST at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "ENDTEST at line $lineNumber, column ${columnStart + 1} does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}",
+                            columnStart,
+                            columnEnd
+                        ))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -375,9 +471,63 @@ class ABBParser {
                         // Allow array access, field access, but check basic variable pattern
                         val cleanVarName = varName.split(Regex("[.\\[{]")).first()
                         if (cleanVarName.isNotEmpty() && !cleanVarName.matches(Regex("^[a-zA-Z_][a-zA-Z0-9_]*$"))) {
-                            errors.add(SyntaxError(lineNumber, "Invalid variable name '$cleanVarName' at line $lineNumber"))
+                            // Find the position of the variable name in the original line
+                            val varIndex = line.indexOf(cleanVarName)
+                            val columnStart = if (varIndex >= 0) varIndex else 0
+                            val columnEnd = if (varIndex >= 0) varIndex + cleanVarName.length else 0
+                            errors.add(SyntaxError(
+                                lineNumber, 
+                                "Invalid variable name '$cleanVarName' at line $lineNumber, column ${columnStart + 1}",
+                                columnStart,
+                                columnEnd
+                            ))
                         }
                     }
+                }
+            }
+            
+            // Check for IF without THEN
+            if (trimmed.matches(Regex("^IF\\s+.+", RegexOption.IGNORE_CASE)) && 
+                !trimmed.matches(Regex("^IF\\s+.+\\s+THEN\\s*.*", RegexOption.IGNORE_CASE))) {
+                val columnStart = line.indexOf("IF", ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "IF statement at line $lineNumber, column ${columnStart + 1} is missing THEN keyword",
+                    columnStart,
+                    line.length
+                ))
+            }
+            
+            // Check for WHILE without DO
+            if (trimmed.matches(Regex("^WHILE\\s+.+", RegexOption.IGNORE_CASE)) && 
+                !trimmed.matches(Regex("^WHILE\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE))) {
+                val columnStart = line.indexOf("WHILE", ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "WHILE loop at line $lineNumber, column ${columnStart + 1} is missing DO keyword",
+                    columnStart,
+                    line.length
+                ))
+            }
+            
+            // Check for FOR without TO or DO
+            if (trimmed.matches(Regex("^FOR\\s+.+", RegexOption.IGNORE_CASE))) {
+                if (!trimmed.contains("TO", ignoreCase = true)) {
+                    val columnStart = line.indexOf("FOR", ignoreCase = true)
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "FOR loop at line $lineNumber, column ${columnStart + 1} is missing TO keyword",
+                        columnStart,
+                        line.length
+                    ))
+                } else if (!trimmed.contains("DO", ignoreCase = true)) {
+                    val columnStart = line.indexOf("FOR", ignoreCase = true)
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "FOR loop at line $lineNumber, column ${columnStart + 1} is missing DO keyword",
+                        columnStart,
+                        line.length
+                    ))
                 }
             }
         }
@@ -393,4 +543,9 @@ class ABBParser {
     data class BlockInfo(val type: String, val lineNumber: Int)
 }
 
-data class SyntaxError(val lineNumber: Int, val message: String)
+data class SyntaxError(
+    val lineNumber: Int, 
+    val message: String,
+    val columnStart: Int = 0,  // 0-based column index where error starts
+    val columnEnd: Int = 0     // 0-based column index where error ends (0 means unknown/whole line)
+)
