@@ -68,7 +68,10 @@ MODULE TestSyntaxErrors
         myArray[1 := 10;
     ENDPROC
     
-    ! Test 12: Semicolon at end (RAPID doesn't use semicolons)
+    ! Test 12: Semicolons are valid (RAPID DOES use semicolons in certain contexts)
+    ! - Variable declarations: VAR, PERS, CONST statements should have semicolons
+    ! - Multiple statements on one line can be separated by semicolons
+    ! - This is valid RAPID code and should NOT trigger errors
     PROC test_semicolon()
         VAR num x;
         x := 10;

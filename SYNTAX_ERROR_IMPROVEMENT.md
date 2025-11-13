@@ -157,7 +157,7 @@ ENDFUNC
 | 不匹配的括号<br>Unmatched parenthesis | `func(a, b` | ✅ 精确到左括号<br>Exact opening paren |
 | 不匹配的方括号<br>Unmatched bracket | `array[1, 2` | ✅ 精确到左方括号<br>Exact opening bracket |
 | 不匹配的花括号<br>Unmatched brace | `data{x, y` | ✅ 精确到左花括号<br>Exact opening brace |
-| 无效的分号<br>Invalid semicolon | `x := 10;` | ✅ 精确到分号位置<br>Exact semicolon |
+| ~~无效的分号~~<br>~~Invalid semicolon~~ | ~~`x := 10;`~~ | ~~已移除：分号在 RAPID 中是有效的~~<br>~~Removed: Semicolons are valid in RAPID~~ |
 | 不完整的 PROC<br>Incomplete PROC | `PROC` | ✅ 精确到关键字<br>Exact keyword |
 | 不完整的 FUNC<br>Incomplete FUNC | `FUNC num` | ✅ 精确到关键字<br>Exact keyword |
 | 不完整的变量声明<br>Incomplete VAR | `VAR` | ✅ 精确到关键字<br>Exact keyword |

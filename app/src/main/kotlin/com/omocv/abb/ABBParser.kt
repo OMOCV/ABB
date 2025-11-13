@@ -659,18 +659,11 @@ class ABBParser {
                 }
             }
             
-            // Check for invalid semicolon usage (RAPID doesn't use semicolons for statement termination)
-            if (trimmed.endsWith(";") && !trimmed.matches(Regex(".*RETURN\\s+.*;.*", RegexOption.IGNORE_CASE))) {
-                val semicolonPos = line.lastIndexOf(';')
-                if (semicolonPos >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${semicolonPos + 1} 列：语句末尾不应有分号 - RAPID 语言不使用分号结束语句\n建议：删除分号，RAPID 语句通过换行自动结束",
-                        semicolonPos,
-                        semicolonPos + 1
-                    ))
-                }
-            }
+            // Note: Semicolons ARE valid in RAPID language for:
+            // - Variable declarations (VAR, PERS, CONST)
+            // - Separating multiple statements on one line
+            // - After certain instructions (motion instructions, function calls, etc.)
+            // Therefore, we do NOT flag semicolons as errors
             
             // Check for incomplete PROC/FUNC/TRAP declarations
             if (trimmed.matches(Regex("^PROC\\s*$", RegexOption.IGNORE_CASE))) {
