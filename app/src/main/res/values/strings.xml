@@ -22,6 +22,7 @@
     <string name="no_bookmarks">没有书签</string>
     <string name="view_bookmarks">查看书签</string>
     <string name="line_number">行 %s</string>
+    <string name="line_column_number">行 %s, 列 %s</string>
     <string name="line_number_hint">输入行号</string>
     <string name="jumped_to_line">跳转到行 %d</string>
     <string name="format_code">格式化代码</string>

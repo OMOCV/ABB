@@ -28,10 +28,21 @@ class SyntaxErrorAdapter(
     override fun onBindViewHolder(holder: SyntaxErrorViewHolder, position: Int) {
         val error = errors[position]
         
-        holder.tvErrorLine.text = holder.itemView.context.getString(
-            R.string.line_number,
-            error.lineNumber.toString()
-        )
+        // Build the line/column display text
+        val locationText = if (error.columnStart > 0 || error.columnEnd > 0) {
+            holder.itemView.context.getString(
+                R.string.line_column_number,
+                error.lineNumber.toString(),
+                (error.columnStart + 1).toString()
+            )
+        } else {
+            holder.itemView.context.getString(
+                R.string.line_number,
+                error.lineNumber.toString()
+            )
+        }
+        
+        holder.tvErrorLine.text = locationText
         holder.tvErrorMessage.text = error.message
         
         holder.itemView.setOnClickListener {

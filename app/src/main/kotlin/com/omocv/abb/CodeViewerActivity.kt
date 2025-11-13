@@ -803,6 +803,60 @@ class CodeViewerActivity : AppCompatActivity() {
         }
     }
     
+    private fun jumpToLineAndColumn(lineNumber: Int, columnStart: Int, columnEnd: Int) {
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val lines = content.lines()
+        if (lineNumber > 0 && lineNumber <= lines.size) {
+            // Calculate the character position of the line
+            var charPosition = 0
+            for (i in 0 until lineNumber - 1) {
+                charPosition += lines[i].length + 1 // +1 for newline
+            }
+            
+            if (isEditMode) {
+                // Highlight the specific column range using the unified method FIRST
+                highlightLineAndColumn(lineNumber, columnStart, columnEnd)
+                
+                // Calculate cursor position at the start of the error
+                val cursorPosition = charPosition + columnStart
+                
+                // Place cursor at the start of the error
+                etCodeContent.setSelection(
+                    cursorPosition.coerceAtMost(etCodeContent.text?.length ?: 0)
+                )
+                etCodeContent.requestFocus()
+                
+                // Scroll to make the cursor visible
+                etCodeContent.post {
+                    val layout = etCodeContent.layout
+                    if (layout != null && lineNumber - 1 < layout.lineCount) {
+                        val lineTop = layout.getLineTop(lineNumber - 1)
+                        scrollViewCode.smoothScrollTo(0, lineTop)
+                    }
+                }
+            } else {
+                // Calculate the Y position of the line in view mode
+                tvCodeContent.post {
+                    val layout = tvCodeContent.layout
+                    if (layout != null && lineNumber - 1 < layout.lineCount) {
+                        val lineTop = layout.getLineTop(lineNumber - 1)
+                        scrollViewCode.smoothScrollTo(0, lineTop)
+                        
+                        // Highlight the specific column range using the unified method
+                        highlightLineAndColumn(lineNumber, columnStart, columnEnd)
+                    }
+                }
+            }
+            
+            val columnInfo = if (columnStart > 0 || columnEnd > 0) {
+                ", column ${columnStart + 1}"
+            } else {
+                ""
+            }
+            Toast.makeText(this, "Jumped to line $lineNumber$columnInfo", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
     private fun highlightLine(lineNumber: Int) {
         // Highlight the target line persistently by adding a background color
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
@@ -882,6 +936,76 @@ class CodeViewerActivity : AppCompatActivity() {
             if (!isEditMode) {
                 tvCodeContent.setOnClickListener(null)
                 displayContent()
+            }
+        }
+    }
+    
+    private fun highlightLineAndColumn(lineNumber: Int, columnStart: Int, columnEnd: Int) {
+        // Highlight a specific column range within a line
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val lines = content.lines()
+        
+        if (lineNumber > 0 && lineNumber <= lines.size) {
+            // Store the currently highlighted line
+            currentHighlightedLine = lineNumber
+            
+            // Calculate character positions for the entire line
+            var lineStartPos = 0
+            for (i in 0 until lineNumber - 1) {
+                lineStartPos += lines[i].length + 1
+            }
+            
+            // Calculate the exact character positions for the error range
+            val errorStartPos = lineStartPos + columnStart
+            val errorEndPos = if (columnEnd > columnStart) {
+                lineStartPos + columnEnd
+            } else {
+                // If columnEnd is 0 or not set, highlight the rest of the line
+                lineStartPos + lines[lineNumber - 1].length
+            }
+            
+            // Use a more visible highlight color - different for error highlighting
+            val highlightColor = if (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES) {
+                Color.parseColor("#6A3030") // Red-tinted dark background for errors in dark theme
+            } else {
+                Color.parseColor("#FFB3BA") // Light red/pink for errors in light theme
+            }
+            
+            if (isEditMode) {
+                // Apply highlighting in edit mode
+                val editableContent = etCodeContent.text
+                if (editableContent is Spannable) {
+                    // Remove previous highlight span if it exists
+                    if (currentHighlightSpan != null) {
+                        editableContent.removeSpan(currentHighlightSpan)
+                    }
+                    
+                    // Create and apply new highlight span for the specific error range
+                    currentHighlightSpan = BackgroundColorSpan(highlightColor)
+                    editableContent.setSpan(
+                        currentHighlightSpan,
+                        errorStartPos.coerceAtMost(editableContent.length),
+                        errorEndPos.coerceAtMost(editableContent.length),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+                }
+            } else {
+                // Apply syntax highlighting first in view mode
+                val highlighted = syntaxHighlighter.highlight(content)
+                // Then add the background span to the highlighted text for the specific error range
+                val finalSpannable = SpannableString(highlighted)
+                finalSpannable.setSpan(
+                    BackgroundColorSpan(highlightColor),
+                    errorStartPos.coerceAtMost(finalSpannable.length),
+                    errorEndPos.coerceAtMost(finalSpannable.length),
+                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+                tvCodeContent.text = finalSpannable
+                
+                // Set up click listener to clear highlight when user clicks on the code
+                tvCodeContent.setOnClickListener {
+                    clearHighlight()
+                }
             }
         }
     }
@@ -1029,7 +1153,7 @@ class CodeViewerActivity : AppCompatActivity() {
             .create()
         
         rvSearchResults.adapter = SyntaxErrorAdapter(errors) { error ->
-            jumpToLine(error.lineNumber)
+            jumpToLineAndColumn(error.lineNumber, error.columnStart, error.columnEnd)
             dialog.dismiss()
         }
         
