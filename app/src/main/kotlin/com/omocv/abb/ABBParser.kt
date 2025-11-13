@@ -224,9 +224,6 @@ class ABBParser {
     fun validateSyntax(content: String): List<SyntaxError> {
         val errors = mutableListOf<SyntaxError>()
         val lines = content.lines()
-        
-        var moduleCount = 0
-        var endModuleCount = 0
         val blockStack = mutableListOf<BlockInfo>()
         
         lines.forEachIndexed { index, line ->
@@ -238,548 +235,509 @@ class ABBParser {
                 return@forEachIndexed
             }
             
-            // First, check for unclosed strings (highest priority to avoid false positives)
-            val stringQuoteCount = line.count { it == '"' }
-            if (stringQuoteCount % 2 != 0) {
-                // Find the position of the unclosed quote
-                var lastQuotePos = -1
-                var inString = false
-                for (i in line.indices) {
-                    if (line[i] == '"') {
-                        lastQuotePos = i
-                        inString = !inString
-                    }
-                }
-                if (inString && lastQuotePos >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${lastQuotePos + 1} 列：字符串未闭合 - 缺少结束引号\n建议：在字符串末尾添加双引号 \"",
-                        lastQuotePos,
-                        line.length
-                    ))
-                    return@forEachIndexed // Skip further checks on this line
-                }
+            // Check for unclosed strings (highest priority)
+            checkUnclosedStrings(line, lineNumber, errors)?.let {
+                return@forEachIndexed // Skip further checks on this line
             }
             
-            // Check for unmatched parentheses, brackets, and braces (excluding comments and strings)
-            val lineWithoutStringsAndComments = removeStringsAndComments(line)
-            val parenCount = lineWithoutStringsAndComments.count { it == '(' } - lineWithoutStringsAndComments.count { it == ')' }
-            val bracketCount = lineWithoutStringsAndComments.count { it == '[' } - lineWithoutStringsAndComments.count { it == ']' }
-            val braceCount = lineWithoutStringsAndComments.count { it == '{' } - lineWithoutStringsAndComments.count { it == '}' }
+            // Check for unmatched parentheses, brackets, and braces
+            checkUnmatchedDelimiters(line, lineNumber, errors)
             
-            if (parenCount > 0) {
-                val lastOpenParen = lineWithoutStringsAndComments.lastIndexOf('(')
-                if (lastOpenParen >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${lastOpenParen + 1} 列：左括号未闭合 - 缺少匹配的右括号\n建议：在语句末尾或适当位置添加 )",
-                        lastOpenParen,
-                        lastOpenParen + 1
-                    ))
-                }
-            } else if (parenCount < 0) {
-                val firstCloseParen = lineWithoutStringsAndComments.indexOf(')')
-                if (firstCloseParen >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${firstCloseParen + 1} 列：右括号多余 - 没有匹配的左括号\n建议：删除此右括号或在前面添加左括号 (",
-                        firstCloseParen,
-                        firstCloseParen + 1
-                    ))
+            // Check block structure matching
+            checkBlockStructure(trimmed, line, lineNumber, blockStack, errors)
+            
+            // Check for invalid syntax patterns
+            checkAssignmentStatements(trimmed, line, lineNumber, errors)
+            checkControlStructures(trimmed, line, lineNumber, errors)
+            checkDeclarations(trimmed, line, lineNumber, errors)
+            checkReturnStatements(trimmed, lineNumber, blockStack, errors)
+            checkIncompleteFunctionCalls(trimmed, lineNumber, errors)
+        }
+        
+        // Check for unclosed blocks
+        checkUnclosedBlocks(blockStack, errors)
+        
+        return errors
+    }
+    
+    /**
+     * Check for unclosed strings in a line
+     * Returns non-null if string error was found and further checks should be skipped
+     */
+    private fun checkUnclosedStrings(line: String, lineNumber: Int, errors: MutableList<SyntaxError>): Boolean? {
+        val stringQuoteCount = line.count { it == '"' }
+        if (stringQuoteCount % 2 != 0) {
+            // Find the position of the unclosed quote
+            var lastQuotePos = -1
+            var inString = false
+            for (i in line.indices) {
+                if (line[i] == '"') {
+                    lastQuotePos = i
+                    inString = !inString
                 }
             }
-            
-            if (bracketCount > 0) {
-                val lastOpenBracket = lineWithoutStringsAndComments.lastIndexOf('[')
-                if (lastOpenBracket >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${lastOpenBracket + 1} 列：左方括号未闭合 - 缺少匹配的右方括号\n建议：在数组索引或列表末尾添加 ]",
-                        lastOpenBracket,
-                        lastOpenBracket + 1
-                    ))
-                }
-            } else if (bracketCount < 0) {
-                val firstCloseBracket = lineWithoutStringsAndComments.indexOf(']')
-                if (firstCloseBracket >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${firstCloseBracket + 1} 列：右方括号多余 - 没有匹配的左方括号\n建议：删除此右方括号或在前面添加左方括号 [",
-                        firstCloseBracket,
-                        firstCloseBracket + 1
-                    ))
-                }
-            }
-            
-            if (braceCount > 0) {
-                val lastOpenBrace = lineWithoutStringsAndComments.lastIndexOf('{')
-                if (lastOpenBrace >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${lastOpenBrace + 1} 列：左花括号未闭合 - 缺少匹配的右花括号\n建议：在数据结构末尾添加 }",
-                        lastOpenBrace,
-                        lastOpenBrace + 1
-                    ))
-                }
-            } else if (braceCount < 0) {
-                val firstCloseBrace = lineWithoutStringsAndComments.indexOf('}')
-                if (firstCloseBrace >= 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${firstCloseBrace + 1} 列：右花括号多余 - 没有匹配的左花括号\n建议：删除此右花括号或在前面添加左花括号 {",
-                        firstCloseBrace,
-                        firstCloseBrace + 1
-                    ))
-                }
-            }
-            
-            // Check MODULE/ENDMODULE matching
-            when {
-                trimmed.matches(Regex("^MODULE\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
-                    moduleCount++
-                    blockStack.add(BlockInfo("MODULE", lineNumber))
-                }
-                trimmed.matches(Regex("^ENDMODULE\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    endModuleCount++
-                    val columnStart = line.indexOf("ENDMODULE", ignoreCase = true)
-                    val columnEnd = columnStart + "ENDMODULE".length
-                    if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDMODULE 没有对应的开始块 - 缺少 MODULE 声明\n建议：在文件开头添加 MODULE 模块名",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else if (blockStack.last().type != "MODULE") {
-                        val openBlock = blockStack.last()
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDMODULE 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDMODULE",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else {
-                        blockStack.removeAt(blockStack.size - 1)
-                    }
-                }
-                
-                // Check PROC/ENDPROC matching
-                trimmed.matches(Regex("^PROC\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
-                    blockStack.add(BlockInfo("PROC", lineNumber))
-                }
-                trimmed.matches(Regex("^ENDPROC\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    val columnStart = line.indexOf("ENDPROC", ignoreCase = true)
-                    val columnEnd = columnStart + "ENDPROC".length
-                    if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDPROC 没有对应的开始块 - 缺少 PROC 声明\n建议：在此之前添加 PROC 过程名()",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else if (blockStack.last().type != "PROC") {
-                        val openBlock = blockStack.last()
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDPROC 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDPROC",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else {
-                        blockStack.removeAt(blockStack.size - 1)
-                    }
-                }
-                
-                // Check FUNC/ENDFUNC matching
-                trimmed.matches(Regex("^FUNC\\s+\\w+\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
-                    blockStack.add(BlockInfo("FUNC", lineNumber))
-                }
-                trimmed.matches(Regex("^ENDFUNC\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    val columnStart = line.indexOf("ENDFUNC", ignoreCase = true)
-                    val columnEnd = columnStart + "ENDFUNC".length
-                    if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDFUNC 没有对应的开始块 - 缺少 FUNC 声明\n建议：在此之前添加 FUNC 返回类型 函数名()",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else if (blockStack.last().type != "FUNC") {
-                        val openBlock = blockStack.last()
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDFUNC 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDFUNC",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else {
-                        blockStack.removeAt(blockStack.size - 1)
-                    }
-                }
-                
-                // Check TRAP/ENDTRAP matching
-                trimmed.matches(Regex("^TRAP\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
-                    blockStack.add(BlockInfo("TRAP", lineNumber))
-                }
-                trimmed.matches(Regex("^ENDTRAP\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    val columnStart = line.indexOf("ENDTRAP", ignoreCase = true)
-                    val columnEnd = columnStart + "ENDTRAP".length
-                    if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDTRAP 没有对应的开始块 - 缺少 TRAP 声明\n建议：在此之前添加 TRAP 陷阱名",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else if (blockStack.last().type != "TRAP") {
-                        val openBlock = blockStack.last()
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDTRAP 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDTRAP",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else {
-                        blockStack.removeAt(blockStack.size - 1)
-                    }
-                }
-                
-                // Check IF/ENDIF matching
-                trimmed.matches(Regex("^IF\\s+.+\\s+THEN\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    blockStack.add(BlockInfo("IF", lineNumber))
-                }
-                trimmed.matches(Regex("^ENDIF\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    val columnStart = line.indexOf("ENDIF", ignoreCase = true)
-                    val columnEnd = columnStart + "ENDIF".length
-                    if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDIF 没有对应的开始块 - 缺少 IF 语句\n建议：在此之前添加 IF 条件 THEN",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else if (blockStack.last().type != "IF") {
-                        val openBlock = blockStack.last()
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDIF 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDIF",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else {
-                        blockStack.removeAt(blockStack.size - 1)
-                    }
-                }
-                
-                // Check FOR/ENDFOR matching
-                trimmed.matches(Regex("^FOR\\s+.+\\s+(FROM\\s+.+\\s+)?TO\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    blockStack.add(BlockInfo("FOR", lineNumber))
-                }
-                trimmed.matches(Regex("^ENDFOR\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    val columnStart = line.indexOf("ENDFOR", ignoreCase = true)
-                    val columnEnd = columnStart + "ENDFOR".length
-                    if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDFOR 没有对应的开始块 - 缺少 FOR 循环\n建议：在此之前添加 FOR 变量 FROM 起始值 TO 结束值 DO",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else if (blockStack.last().type != "FOR") {
-                        val openBlock = blockStack.last()
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDFOR 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDFOR",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else {
-                        blockStack.removeAt(blockStack.size - 1)
-                    }
-                }
-                
-                // Check WHILE/ENDWHILE matching
-                trimmed.matches(Regex("^WHILE\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    blockStack.add(BlockInfo("WHILE", lineNumber))
-                }
-                trimmed.matches(Regex("^ENDWHILE\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    val columnStart = line.indexOf("ENDWHILE", ignoreCase = true)
-                    val columnEnd = columnStart + "ENDWHILE".length
-                    if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDWHILE 没有对应的开始块 - 缺少 WHILE 循环\n建议：在此之前添加 WHILE 条件 DO",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else if (blockStack.last().type != "WHILE") {
-                        val openBlock = blockStack.last()
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDWHILE 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDWHILE",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else {
-                        blockStack.removeAt(blockStack.size - 1)
-                    }
-                }
-                
-                // Check TEST/ENDTEST matching
-                trimmed.matches(Regex("^TEST\\s+.+", RegexOption.IGNORE_CASE)) -> {
-                    blockStack.add(BlockInfo("TEST", lineNumber))
-                }
-                trimmed.matches(Regex("^ENDTEST\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    val columnStart = line.indexOf("ENDTEST", ignoreCase = true)
-                    val columnEnd = columnStart + "ENDTEST".length
-                    if (blockStack.isEmpty()) {
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDTEST 没有对应的开始块 - 缺少 TEST 语句\n建议：在此之前添加 TEST 表达式",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else if (blockStack.last().type != "TEST") {
-                        val openBlock = blockStack.last()
-                        errors.add(SyntaxError(
-                            lineNumber, 
-                            "第 $lineNumber 行，第 ${columnStart + 1} 列：ENDTEST 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 ENDTEST",
-                            columnStart,
-                            columnEnd
-                        ))
-                    } else {
-                        blockStack.removeAt(blockStack.size - 1)
-                    }
-                }
-            }
-            
-            // Check for invalid syntax patterns (enhanced validation)
-            
-            // Check for incomplete or invalid assignment statements
-            if (trimmed.contains(":=")) {
-                val parts = trimmed.split(":=")
-                if (parts.size >= 2) {
-                    val leftPart = parts[0].trim()
-                    val rightPart = parts[1].trim()
-                    
-                    // Check if left side is empty or invalid
-                    if (leftPart.isEmpty()) {
-                        val colonPos = line.indexOf(":=")
-                        errors.add(SyntaxError(
-                            lineNumber,
-                            "第 $lineNumber 行，第 ${colonPos + 1} 列：赋值语句左侧缺少变量名\n建议：在 := 前添加变量名，例如：变量名 := 值",
-                            colonPos,
-                            colonPos + 2
-                        ))
-                    } else {
-                        // Get the last token which should be the variable name
-                        val tokens = leftPart.split(Regex("\\s+"))
-                        if (tokens.isNotEmpty()) {
-                            val varName = tokens.last()
-                            // Allow array access, field access, but check basic variable pattern
-                            val cleanVarName = varName.split(Regex("[.\\[{]")).first()
-                            if (cleanVarName.isNotEmpty() && !cleanVarName.matches(Regex("^[a-zA-Z_][a-zA-Z0-9_]*$"))) {
-                                val varIndex = line.indexOf(cleanVarName)
-                                val columnStart = if (varIndex >= 0) varIndex else 0
-                                val columnEnd = if (varIndex >= 0) varIndex + cleanVarName.length else 0
-                                errors.add(SyntaxError(
-                                    lineNumber, 
-                                    "第 $lineNumber 行，第 ${columnStart + 1} 列：无效的变量名 '$cleanVarName'\n建议：变量名必须以字母或下划线开头，只能包含字母、数字和下划线",
-                                    columnStart,
-                                    columnEnd
-                                ))
-                            }
-                        }
-                    }
-                    
-                    // Check if right side is empty
-                    if (rightPart.isEmpty()) {
-                        val colonPos = line.indexOf(":=")
-                        errors.add(SyntaxError(
-                            lineNumber,
-                            "第 $lineNumber 行，第 ${colonPos + 3} 列：赋值语句右侧缺少表达式\n建议：在 := 后添加要赋的值或表达式",
-                            colonPos + 2,
-                            line.length
-                        ))
-                    }
-                } else {
-                    // Assignment operator at the end of the line
-                    val colonPos = line.indexOf(":=")
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${colonPos + 1} 列：赋值语句不完整 - 缺少右侧表达式\n建议：在 := 后添加要赋的值",
-                        colonPos,
-                        line.length
-                    ))
-                }
-            }
-            
-            // Check for IF without THEN
-            if (trimmed.matches(Regex("^IF\\s+.+", RegexOption.IGNORE_CASE)) && 
-                !trimmed.matches(Regex("^IF\\s+.+\\s+THEN\\s*.*", RegexOption.IGNORE_CASE))) {
-                val columnStart = line.indexOf("IF", ignoreCase = true)
+            if (inString && lastQuotePos >= 0) {
                 errors.add(SyntaxError(
                     lineNumber,
-                    "第 $lineNumber 行，第 ${columnStart + 1} 列：IF 语句缺少 THEN 关键字\n建议：在条件表达式后添加 THEN，格式：IF 条件 THEN",
-                    columnStart,
+                    "第 $lineNumber 行，第 ${lastQuotePos + 1} 列：字符串未闭合 - 缺少结束引号\n建议：在字符串末尾添加双引号 \"",
+                    lastQuotePos,
                     line.length
                 ))
+                return true // Skip further checks on this line
             }
-            
-            // Check for WHILE without DO
-            if (trimmed.matches(Regex("^WHILE\\s+.+", RegexOption.IGNORE_CASE)) && 
-                !trimmed.matches(Regex("^WHILE\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE))) {
-                val columnStart = line.indexOf("WHILE", ignoreCase = true)
+        }
+        return null
+    }
+    
+    /**
+     * Check for unmatched parentheses, brackets, and braces
+     */
+    private fun checkUnmatchedDelimiters(line: String, lineNumber: Int, errors: MutableList<SyntaxError>) {
+        val lineWithoutStringsAndComments = removeStringsAndComments(line)
+        
+        // Check parentheses
+        val parenCount = lineWithoutStringsAndComments.count { it == '(' } - lineWithoutStringsAndComments.count { it == ')' }
+        if (parenCount > 0) {
+            val lastOpenParen = lineWithoutStringsAndComments.lastIndexOf('(')
+            if (lastOpenParen >= 0) {
                 errors.add(SyntaxError(
                     lineNumber,
-                    "第 $lineNumber 行，第 ${columnStart + 1} 列：WHILE 循环缺少 DO 关键字\n建议：在条件表达式后添加 DO，格式：WHILE 条件 DO",
-                    columnStart,
-                    line.length
+                    "第 $lineNumber 行，第 ${lastOpenParen + 1} 列：左括号未闭合 - 缺少匹配的右括号\n建议：在语句末尾或适当位置添加 )",
+                    lastOpenParen,
+                    lastOpenParen + 1
                 ))
             }
-            
-            // Check for FOR without TO or DO
-            if (trimmed.matches(Regex("^FOR\\s+.+", RegexOption.IGNORE_CASE))) {
-                if (!trimmed.contains("TO", ignoreCase = true)) {
-                    val columnStart = line.indexOf("FOR", ignoreCase = true)
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${columnStart + 1} 列：FOR 循环缺少 TO 关键字\n建议：指定循环结束值，格式：FOR 变量 FROM 起始值 TO 结束值 DO",
-                        columnStart,
-                        line.length
-                    ))
-                } else if (!trimmed.contains("DO", ignoreCase = true)) {
-                    val columnStart = line.indexOf("FOR", ignoreCase = true)
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${columnStart + 1} 列：FOR 循环缺少 DO 关键字\n建议：在循环范围后添加 DO，格式：FOR 变量 FROM 起始值 TO 结束值 DO",
-                        columnStart,
-                        line.length
-                    ))
-                }
-            }
-            
-            // Note: Semicolons ARE valid in RAPID language for:
-            // - Variable declarations (VAR, PERS, CONST)
-            // - Separating multiple statements on one line
-            // - After certain instructions (motion instructions, function calls, etc.)
-            // Therefore, we do NOT flag semicolons as errors
-            
-            // Check for incomplete PROC/FUNC/TRAP declarations
-            if (trimmed.matches(Regex("^PROC\\s*$", RegexOption.IGNORE_CASE))) {
-                val columnStart = line.indexOf("PROC", ignoreCase = true)
+        } else if (parenCount < 0) {
+            val firstCloseParen = lineWithoutStringsAndComments.indexOf(')')
+            if (firstCloseParen >= 0) {
                 errors.add(SyntaxError(
                     lineNumber,
-                    "第 $lineNumber 行，第 ${columnStart + 1} 列：PROC 声明不完整 - 缺少过程名称\n建议：添加过程名称和参数，格式：PROC 过程名(参数列表)",
-                    columnStart,
-                    line.length
+                    "第 $lineNumber 行，第 ${firstCloseParen + 1} 列：右括号多余 - 没有匹配的左括号\n建议：删除此右括号或在前面添加左括号 (",
+                    firstCloseParen,
+                    firstCloseParen + 1
                 ))
-            }
-            
-            if (trimmed.matches(Regex("^FUNC\\s*$", RegexOption.IGNORE_CASE))) {
-                val columnStart = line.indexOf("FUNC", ignoreCase = true)
-                errors.add(SyntaxError(
-                    lineNumber,
-                    "第 $lineNumber 行，第 ${columnStart + 1} 列：FUNC 声明不完整 - 缺少返回类型和函数名\n建议：格式：FUNC 返回类型 函数名(参数列表)，例如：FUNC num GetValue()",
-                    columnStart,
-                    line.length
-                ))
-            } else if (trimmed.matches(Regex("^FUNC\\s+\\w+\\s*$", RegexOption.IGNORE_CASE))) {
-                val columnStart = line.indexOf("FUNC", ignoreCase = true)
-                errors.add(SyntaxError(
-                    lineNumber,
-                    "第 $lineNumber 行，第 ${columnStart + 1} 列：FUNC 声明不完整 - 缺少函数名\n建议：在返回类型后添加函数名，格式：FUNC 返回类型 函数名(参数列表)",
-                    columnStart,
-                    line.length
-                ))
-            }
-            
-            if (trimmed.matches(Regex("^TRAP\\s*$", RegexOption.IGNORE_CASE))) {
-                val columnStart = line.indexOf("TRAP", ignoreCase = true)
-                errors.add(SyntaxError(
-                    lineNumber,
-                    "第 $lineNumber 行，第 ${columnStart + 1} 列：TRAP 声明不完整 - 缺少陷阱例程名称\n建议：添加陷阱例程名称，格式：TRAP 陷阱名",
-                    columnStart,
-                    line.length
-                ))
-            }
-            
-            // Check for incomplete MODULE declaration
-            if (trimmed.matches(Regex("^MODULE\\s*$", RegexOption.IGNORE_CASE))) {
-                val columnStart = line.indexOf("MODULE", ignoreCase = true)
-                errors.add(SyntaxError(
-                    lineNumber,
-                    "第 $lineNumber 行，第 ${columnStart + 1} 列：MODULE 声明不完整 - 缺少模块名称\n建议：添加模块名称，格式：MODULE 模块名",
-                    columnStart,
-                    line.length
-                ))
-            }
-            
-            // Check for invalid RETURN statement usage
-            if (trimmed.matches(Regex("^RETURN\\s*$", RegexOption.IGNORE_CASE))) {
-                val columnStart = line.indexOf("RETURN", ignoreCase = true)
-                // Check if we're in a FUNC block (should return a value)
-                val inFunc = blockStack.any { it.type == "FUNC" }
-                if (inFunc) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${columnStart + 1} 列：RETURN 语句缺少返回值 - FUNC 函数必须返回一个值\n建议：在 RETURN 后添加返回值，格式：RETURN 表达式",
-                        columnStart,
-                        line.length
-                    ))
-                }
-            }
-            
-            // Check for VAR/PERS/CONST without variable name or type
-            if (trimmed.matches(Regex("^(VAR|PERS|CONST)\\s*$", RegexOption.IGNORE_CASE))) {
-                val match = Regex("^(VAR|PERS|CONST)", RegexOption.IGNORE_CASE).find(trimmed)
-                if (match != null) {
-                    val keyword = match.value
-                    val columnStart = line.indexOf(keyword, ignoreCase = true)
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${columnStart + 1} 列：变量声明不完整 - 缺少数据类型和变量名\n建议：格式：${keyword.uppercase()} 数据类型 变量名，例如：VAR num counter",
-                        columnStart,
-                        line.length
-                    ))
-                }
-            } else if (trimmed.matches(Regex("^(VAR|PERS|CONST)\\s+\\w+\\s*$", RegexOption.IGNORE_CASE))) {
-                val match = Regex("^(VAR|PERS|CONST)", RegexOption.IGNORE_CASE).find(trimmed)
-                if (match != null) {
-                    val keyword = match.value
-                    val columnStart = line.indexOf(keyword, ignoreCase = true)
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${columnStart + 1} 列：变量声明不完整 - 缺少变量名\n建议：在数据类型后添加变量名，格式：${keyword.uppercase()} 数据类型 变量名",
-                        columnStart,
-                        line.length
-                    ))
-                }
-            }
-            
-            // Check for incomplete function calls (function name followed by just opening paren at end of line)
-            if (trimmed.matches(Regex(".*\\w+\\s*\\(\\s*$"))) {
-                val openParenPos = trimmed.lastIndexOf('(')
-                if (openParenPos > 0) {
-                    errors.add(SyntaxError(
-                        lineNumber,
-                        "第 $lineNumber 行，第 ${openParenPos + 1} 列：函数调用不完整 - 参数列表和右括号缺失\n建议：补充参数并闭合括号，格式：函数名(参数1, 参数2)",
-                        openParenPos,
-                        line.length
-                    ))
-                }
             }
         }
         
-        // Check for unclosed blocks - report with specific line numbers
+        // Check brackets
+        val bracketCount = lineWithoutStringsAndComments.count { it == '[' } - lineWithoutStringsAndComments.count { it == ']' }
+        if (bracketCount > 0) {
+            val lastOpenBracket = lineWithoutStringsAndComments.lastIndexOf('[')
+            if (lastOpenBracket >= 0) {
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${lastOpenBracket + 1} 列：左方括号未闭合 - 缺少匹配的右方括号\n建议：在数组索引或列表末尾添加 ]",
+                    lastOpenBracket,
+                    lastOpenBracket + 1
+                ))
+            }
+        } else if (bracketCount < 0) {
+            val firstCloseBracket = lineWithoutStringsAndComments.indexOf(']')
+            if (firstCloseBracket >= 0) {
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${firstCloseBracket + 1} 列：右方括号多余 - 没有匹配的左方括号\n建议：删除此右方括号或在前面添加左方括号 [",
+                    firstCloseBracket,
+                    firstCloseBracket + 1
+                ))
+            }
+        }
+        
+        // Check braces
+        val braceCount = lineWithoutStringsAndComments.count { it == '{' } - lineWithoutStringsAndComments.count { it == '}' }
+        if (braceCount > 0) {
+            val lastOpenBrace = lineWithoutStringsAndComments.lastIndexOf('{')
+            if (lastOpenBrace >= 0) {
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${lastOpenBrace + 1} 列：左花括号未闭合 - 缺少匹配的右花括号\n建议：在数据结构末尾添加 }",
+                    lastOpenBrace,
+                    lastOpenBrace + 1
+                ))
+            }
+        } else if (braceCount < 0) {
+            val firstCloseBrace = lineWithoutStringsAndComments.indexOf('}')
+            if (firstCloseBrace >= 0) {
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${firstCloseBrace + 1} 列：右花括号多余 - 没有匹配的左花括号\n建议：删除此右花括号或在前面添加左花括号 {",
+                    firstCloseBrace,
+                    firstCloseBrace + 1
+                ))
+            }
+        }
+    }
+    
+    /**
+     * Check block structure matching (MODULE, PROC, FUNC, TRAP, IF, FOR, WHILE, TEST)
+     */
+    private fun checkBlockStructure(
+        trimmed: String, 
+        line: String, 
+        lineNumber: Int, 
+        blockStack: MutableList<BlockInfo>, 
+        errors: MutableList<SyntaxError>
+    ) {
+        when {
+            // MODULE/ENDMODULE
+            trimmed.matches(Regex("^MODULE\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                blockStack.add(BlockInfo("MODULE", lineNumber))
+            }
+            trimmed.matches(Regex("^ENDMODULE\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                checkEndBlock("ENDMODULE", line, lineNumber, blockStack, errors, "MODULE")
+            }
+            
+            // PROC/ENDPROC
+            trimmed.matches(Regex("^PROC\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                blockStack.add(BlockInfo("PROC", lineNumber))
+            }
+            trimmed.matches(Regex("^ENDPROC\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                checkEndBlock("ENDPROC", line, lineNumber, blockStack, errors, "PROC")
+            }
+            
+            // FUNC/ENDFUNC
+            trimmed.matches(Regex("^FUNC\\s+\\w+\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                blockStack.add(BlockInfo("FUNC", lineNumber))
+            }
+            trimmed.matches(Regex("^ENDFUNC\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                checkEndBlock("ENDFUNC", line, lineNumber, blockStack, errors, "FUNC")
+            }
+            
+            // TRAP/ENDTRAP
+            trimmed.matches(Regex("^TRAP\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
+                blockStack.add(BlockInfo("TRAP", lineNumber))
+            }
+            trimmed.matches(Regex("^ENDTRAP\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                checkEndBlock("ENDTRAP", line, lineNumber, blockStack, errors, "TRAP")
+            }
+            
+            // IF/ENDIF
+            trimmed.matches(Regex("^IF\\s+.+\\s+THEN\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                blockStack.add(BlockInfo("IF", lineNumber))
+            }
+            trimmed.matches(Regex("^ENDIF\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                checkEndBlock("ENDIF", line, lineNumber, blockStack, errors, "IF")
+            }
+            
+            // FOR/ENDFOR
+            trimmed.matches(Regex("^FOR\\s+.+\\s+(FROM\\s+.+\\s+)?TO\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                blockStack.add(BlockInfo("FOR", lineNumber))
+            }
+            trimmed.matches(Regex("^ENDFOR\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                checkEndBlock("ENDFOR", line, lineNumber, blockStack, errors, "FOR")
+            }
+            
+            // WHILE/ENDWHILE
+            trimmed.matches(Regex("^WHILE\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                blockStack.add(BlockInfo("WHILE", lineNumber))
+            }
+            trimmed.matches(Regex("^ENDWHILE\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                checkEndBlock("ENDWHILE", line, lineNumber, blockStack, errors, "WHILE")
+            }
+            
+            // TEST/ENDTEST
+            trimmed.matches(Regex("^TEST\\s+.+", RegexOption.IGNORE_CASE)) -> {
+                blockStack.add(BlockInfo("TEST", lineNumber))
+            }
+            trimmed.matches(Regex("^ENDTEST\\s*.*", RegexOption.IGNORE_CASE)) -> {
+                checkEndBlock("ENDTEST", line, lineNumber, blockStack, errors, "TEST")
+            }
+        }
+    }
+    
+    /**
+     * Helper function to check END* block matching
+     */
+    private fun checkEndBlock(
+        endKeyword: String,
+        line: String,
+        lineNumber: Int,
+        blockStack: MutableList<BlockInfo>,
+        errors: MutableList<SyntaxError>,
+        expectedType: String
+    ) {
+        val columnStart = line.indexOf(endKeyword, ignoreCase = true)
+        val columnEnd = columnStart + endKeyword.length
+        
+        if (blockStack.isEmpty()) {
+            val startKeyword = when (expectedType) {
+                "MODULE" -> "MODULE 模块名"
+                "PROC" -> "PROC 过程名()"
+                "FUNC" -> "FUNC 返回类型 函数名()"
+                "TRAP" -> "TRAP 陷阱名"
+                "IF" -> "IF 条件 THEN"
+                "FOR" -> "FOR 变量 FROM 起始值 TO 结束值 DO"
+                "WHILE" -> "WHILE 条件 DO"
+                "TEST" -> "TEST 表达式"
+                else -> expectedType
+            }
+            errors.add(SyntaxError(
+                lineNumber, 
+                "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 没有对应的开始块 - 缺少 $expectedType 声明\n建议：在此之前添加 $startKeyword",
+                columnStart,
+                columnEnd
+            ))
+        } else if (blockStack.last().type != expectedType) {
+            val openBlock = blockStack.last()
+            errors.add(SyntaxError(
+                lineNumber, 
+                "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 $endKeyword",
+                columnStart,
+                columnEnd
+            ))
+        } else {
+            blockStack.removeAt(blockStack.size - 1)
+        }
+    }
+    
+    /**
+     * Check assignment statements for completeness and validity
+     */
+    private fun checkAssignmentStatements(trimmed: String, line: String, lineNumber: Int, errors: MutableList<SyntaxError>) {
+        if (!trimmed.contains(":=")) return
+        
+        val parts = trimmed.split(":=")
+        if (parts.size >= 2) {
+            val leftPart = parts[0].trim()
+            val rightPart = parts[1].trim()
+            
+            // Check if left side is empty or invalid
+            if (leftPart.isEmpty()) {
+                val colonPos = line.indexOf(":=")
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${colonPos + 1} 列：赋值语句左侧缺少变量名\n建议：在 := 前添加变量名，例如：变量名 := 值",
+                    colonPos,
+                    colonPos + 2
+                ))
+            } else {
+                // Get the last token which should be the variable name
+                val tokens = leftPart.split(Regex("\\s+"))
+                if (tokens.isNotEmpty()) {
+                    val varName = tokens.last()
+                    // Allow array access, field access, but check basic variable pattern
+                    val cleanVarName = varName.split(Regex("[.\\[{]")).first()
+                    if (cleanVarName.isNotEmpty() && !cleanVarName.matches(Regex("^[a-zA-Z_][a-zA-Z0-9_]*$"))) {
+                        val varIndex = line.indexOf(cleanVarName)
+                        val columnStart = if (varIndex >= 0) varIndex else 0
+                        val columnEnd = if (varIndex >= 0) varIndex + cleanVarName.length else 0
+                        errors.add(SyntaxError(
+                            lineNumber, 
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：无效的变量名 '$cleanVarName'\n建议：变量名必须以字母或下划线开头，只能包含字母、数字和下划线",
+                            columnStart,
+                            columnEnd
+                        ))
+                    }
+                }
+            }
+            
+            // Check if right side is empty
+            if (rightPart.isEmpty()) {
+                val colonPos = line.indexOf(":=")
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${colonPos + 3} 列：赋值语句右侧缺少表达式\n建议：在 := 后添加要赋的值或表达式",
+                    colonPos + 2,
+                    line.length
+                ))
+            }
+        } else {
+            // Assignment operator at the end of the line
+            val colonPos = line.indexOf(":=")
+            errors.add(SyntaxError(
+                lineNumber,
+                "第 $lineNumber 行，第 ${colonPos + 1} 列：赋值语句不完整 - 缺少右侧表达式\n建议：在 := 后添加要赋的值",
+                colonPos,
+                line.length
+            ))
+        }
+    }
+    
+    /**
+     * Check control structures (IF, WHILE, FOR) for required keywords
+     */
+    private fun checkControlStructures(trimmed: String, line: String, lineNumber: Int, errors: MutableList<SyntaxError>) {
+        // Check for IF without THEN
+        if (trimmed.matches(Regex("^IF\\s+.+", RegexOption.IGNORE_CASE)) && 
+            !trimmed.matches(Regex("^IF\\s+.+\\s+THEN\\s*.*", RegexOption.IGNORE_CASE))) {
+            val columnStart = line.indexOf("IF", ignoreCase = true)
+            errors.add(SyntaxError(
+                lineNumber,
+                "第 $lineNumber 行，第 ${columnStart + 1} 列：IF 语句缺少 THEN 关键字\n建议：在条件表达式后添加 THEN，格式：IF 条件 THEN",
+                columnStart,
+                line.length
+            ))
+        }
+        
+        // Check for WHILE without DO
+        if (trimmed.matches(Regex("^WHILE\\s+.+", RegexOption.IGNORE_CASE)) && 
+            !trimmed.matches(Regex("^WHILE\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE))) {
+            val columnStart = line.indexOf("WHILE", ignoreCase = true)
+            errors.add(SyntaxError(
+                lineNumber,
+                "第 $lineNumber 行，第 ${columnStart + 1} 列：WHILE 循环缺少 DO 关键字\n建议：在条件表达式后添加 DO，格式：WHILE 条件 DO",
+                columnStart,
+                line.length
+            ))
+        }
+        
+        // Check for FOR without TO or DO
+        if (trimmed.matches(Regex("^FOR\\s+.+", RegexOption.IGNORE_CASE))) {
+            if (!trimmed.contains("TO", ignoreCase = true)) {
+                val columnStart = line.indexOf("FOR", ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：FOR 循环缺少 TO 关键字\n建议：指定循环结束值，格式：FOR 变量 FROM 起始值 TO 结束值 DO",
+                    columnStart,
+                    line.length
+                ))
+            } else if (!trimmed.contains("DO", ignoreCase = true)) {
+                val columnStart = line.indexOf("FOR", ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：FOR 循环缺少 DO 关键字\n建议：在循环范围后添加 DO，格式：FOR 变量 FROM 起始值 TO 结束值 DO",
+                    columnStart,
+                    line.length
+                ))
+            }
+        }
+    }
+    
+    /**
+     * Check declarations (PROC, FUNC, TRAP, MODULE, VAR, PERS, CONST) for completeness
+     */
+    private fun checkDeclarations(trimmed: String, line: String, lineNumber: Int, errors: MutableList<SyntaxError>) {
+        // Check for incomplete PROC declaration
+        if (trimmed.matches(Regex("^PROC\\s*$", RegexOption.IGNORE_CASE))) {
+            val columnStart = line.indexOf("PROC", ignoreCase = true)
+            errors.add(SyntaxError(
+                lineNumber,
+                "第 $lineNumber 行，第 ${columnStart + 1} 列：PROC 声明不完整 - 缺少过程名称\n建议：添加过程名称和参数，格式：PROC 过程名(参数列表)",
+                columnStart,
+                line.length
+            ))
+        }
+        
+        // Check for incomplete FUNC declaration
+        if (trimmed.matches(Regex("^FUNC\\s*$", RegexOption.IGNORE_CASE))) {
+            val columnStart = line.indexOf("FUNC", ignoreCase = true)
+            errors.add(SyntaxError(
+                lineNumber,
+                "第 $lineNumber 行，第 ${columnStart + 1} 列：FUNC 声明不完整 - 缺少返回类型和函数名\n建议：格式：FUNC 返回类型 函数名(参数列表)，例如：FUNC num GetValue()",
+                columnStart,
+                line.length
+            ))
+        } else if (trimmed.matches(Regex("^FUNC\\s+\\w+\\s*$", RegexOption.IGNORE_CASE))) {
+            val columnStart = line.indexOf("FUNC", ignoreCase = true)
+            errors.add(SyntaxError(
+                lineNumber,
+                "第 $lineNumber 行，第 ${columnStart + 1} 列：FUNC 声明不完整 - 缺少函数名\n建议：在返回类型后添加函数名，格式：FUNC 返回类型 函数名(参数列表)",
+                columnStart,
+                line.length
+            ))
+        }
+        
+        // Check for incomplete TRAP declaration
+        if (trimmed.matches(Regex("^TRAP\\s*$", RegexOption.IGNORE_CASE))) {
+            val columnStart = line.indexOf("TRAP", ignoreCase = true)
+            errors.add(SyntaxError(
+                lineNumber,
+                "第 $lineNumber 行，第 ${columnStart + 1} 列：TRAP 声明不完整 - 缺少陷阱例程名称\n建议：添加陷阱例程名称，格式：TRAP 陷阱名",
+                columnStart,
+                line.length
+            ))
+        }
+        
+        // Check for incomplete MODULE declaration
+        if (trimmed.matches(Regex("^MODULE\\s*$", RegexOption.IGNORE_CASE))) {
+            val columnStart = line.indexOf("MODULE", ignoreCase = true)
+            errors.add(SyntaxError(
+                lineNumber,
+                "第 $lineNumber 行，第 ${columnStart + 1} 列：MODULE 声明不完整 - 缺少模块名称\n建议：添加模块名称，格式：MODULE 模块名",
+                columnStart,
+                line.length
+            ))
+        }
+        
+        // Check for VAR/PERS/CONST without variable name or type
+        if (trimmed.matches(Regex("^(VAR|PERS|CONST)\\s*$", RegexOption.IGNORE_CASE))) {
+            val match = Regex("^(VAR|PERS|CONST)", RegexOption.IGNORE_CASE).find(trimmed)
+            if (match != null) {
+                val keyword = match.value
+                val columnStart = line.indexOf(keyword, ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：变量声明不完整 - 缺少数据类型和变量名\n建议：格式：${keyword.uppercase()} 数据类型 变量名，例如：VAR num counter",
+                    columnStart,
+                    line.length
+                ))
+            }
+        } else if (trimmed.matches(Regex("^(VAR|PERS|CONST)\\s+\\w+\\s*$", RegexOption.IGNORE_CASE))) {
+            val match = Regex("^(VAR|PERS|CONST)", RegexOption.IGNORE_CASE).find(trimmed)
+            if (match != null) {
+                val keyword = match.value
+                val columnStart = line.indexOf(keyword, ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：变量声明不完整 - 缺少变量名\n建议：在数据类型后添加变量名，格式：${keyword.uppercase()} 数据类型 变量名",
+                    columnStart,
+                    line.length
+                ))
+            }
+        }
+    }
+    
+    /**
+     * Check RETURN statements for proper usage (FUNC must return a value)
+     */
+    private fun checkReturnStatements(
+        trimmed: String, 
+        lineNumber: Int, 
+        blockStack: MutableList<BlockInfo>, 
+        errors: MutableList<SyntaxError>
+    ) {
+        if (trimmed.matches(Regex("^RETURN\\s*$", RegexOption.IGNORE_CASE))) {
+            val columnStart = trimmed.indexOf("RETURN", ignoreCase = true)
+            // Check if we're in a FUNC block (should return a value)
+            val inFunc = blockStack.any { it.type == "FUNC" }
+            if (inFunc) {
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：RETURN 语句缺少返回值 - FUNC 函数必须返回一个值\n建议：在 RETURN 后添加返回值，格式：RETURN 表达式",
+                    columnStart,
+                    trimmed.length
+                ))
+            }
+        }
+    }
+    
+    /**
+     * Check for incomplete function calls
+     */
+    private fun checkIncompleteFunctionCalls(trimmed: String, lineNumber: Int, errors: MutableList<SyntaxError>) {
+        if (trimmed.matches(Regex(".*\\w+\\s*\\(\\s*$"))) {
+            val openParenPos = trimmed.lastIndexOf('(')
+            if (openParenPos > 0) {
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${openParenPos + 1} 列：函数调用不完整 - 参数列表和右括号缺失\n建议：补充参数并闭合括号，格式：函数名(参数1, 参数2)",
+                    openParenPos,
+                    trimmed.length
+                ))
+            }
+        }
+    }
+    
+    /**
+     * Check for unclosed blocks and add errors
+     */
+    private fun checkUnclosedBlocks(blockStack: MutableList<BlockInfo>, errors: MutableList<SyntaxError>) {
         blockStack.forEach { block ->
             errors.add(SyntaxError(
                 block.lineNumber, 
                 "第 ${block.lineNumber} 行：${block.type} 代码块未闭合 - 缺少 END${block.type}\n建议：在代码块结束位置添加 END${block.type}"
             ))
         }
-        
-        return errors
     }
     
     data class BlockInfo(val type: String, val lineNumber: Int)
