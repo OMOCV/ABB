@@ -530,6 +530,187 @@ class ABBParser {
                     ))
                 }
             }
+            
+            // Check for unclosed strings
+            val stringQuoteCount = line.count { it == '"' }
+            if (stringQuoteCount % 2 != 0) {
+                // Find the position of the unclosed quote
+                var lastQuotePos = -1
+                var inString = false
+                for (i in line.indices) {
+                    if (line[i] == '"') {
+                        lastQuotePos = i
+                        inString = !inString
+                    }
+                }
+                if (inString && lastQuotePos >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "Unclosed string at line $lineNumber, column ${lastQuotePos + 1}",
+                        lastQuotePos,
+                        line.length
+                    ))
+                }
+            }
+            
+            // Check for unmatched parentheses, brackets, and braces (excluding comments and strings)
+            val lineWithoutStringsAndComments = removeStringsAndComments(line)
+            val parenCount = lineWithoutStringsAndComments.count { it == '(' } - lineWithoutStringsAndComments.count { it == ')' }
+            val bracketCount = lineWithoutStringsAndComments.count { it == '[' } - lineWithoutStringsAndComments.count { it == ']' }
+            val braceCount = lineWithoutStringsAndComments.count { it == '{' } - lineWithoutStringsAndComments.count { it == '}' }
+            
+            if (parenCount > 0) {
+                val lastOpenParen = lineWithoutStringsAndComments.lastIndexOf('(')
+                if (lastOpenParen >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "Unclosed parenthesis at line $lineNumber, column ${lastOpenParen + 1}",
+                        lastOpenParen,
+                        lastOpenParen + 1
+                    ))
+                }
+            } else if (parenCount < 0) {
+                val firstCloseParen = lineWithoutStringsAndComments.indexOf(')')
+                if (firstCloseParen >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "Unmatched closing parenthesis at line $lineNumber, column ${firstCloseParen + 1}",
+                        firstCloseParen,
+                        firstCloseParen + 1
+                    ))
+                }
+            }
+            
+            if (bracketCount > 0) {
+                val lastOpenBracket = lineWithoutStringsAndComments.lastIndexOf('[')
+                if (lastOpenBracket >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "Unclosed bracket at line $lineNumber, column ${lastOpenBracket + 1}",
+                        lastOpenBracket,
+                        lastOpenBracket + 1
+                    ))
+                }
+            } else if (bracketCount < 0) {
+                val firstCloseBracket = lineWithoutStringsAndComments.indexOf(']')
+                if (firstCloseBracket >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "Unmatched closing bracket at line $lineNumber, column ${firstCloseBracket + 1}",
+                        firstCloseBracket,
+                        firstCloseBracket + 1
+                    ))
+                }
+            }
+            
+            if (braceCount > 0) {
+                val lastOpenBrace = lineWithoutStringsAndComments.lastIndexOf('{')
+                if (lastOpenBrace >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "Unclosed brace at line $lineNumber, column ${lastOpenBrace + 1}",
+                        lastOpenBrace,
+                        lastOpenBrace + 1
+                    ))
+                }
+            } else if (braceCount < 0) {
+                val firstCloseBrace = lineWithoutStringsAndComments.indexOf('}')
+                if (firstCloseBrace >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "Unmatched closing brace at line $lineNumber, column ${firstCloseBrace + 1}",
+                        firstCloseBrace,
+                        firstCloseBrace + 1
+                    ))
+                }
+            }
+            
+            // Check for invalid semicolon usage (RAPID doesn't use semicolons for statement termination)
+            if (trimmed.endsWith(";") && !trimmed.matches(Regex(".*RETURN\\s+.*;.*", RegexOption.IGNORE_CASE))) {
+                val semicolonPos = line.lastIndexOf(';')
+                if (semicolonPos >= 0) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "Unexpected semicolon at line $lineNumber, column ${semicolonPos + 1} - RAPID does not use semicolons for statement termination",
+                        semicolonPos,
+                        semicolonPos + 1
+                    ))
+                }
+            }
+            
+            // Check for incomplete PROC/FUNC/TRAP declarations
+            if (trimmed.matches(Regex("^PROC\\s*$", RegexOption.IGNORE_CASE))) {
+                val columnStart = line.indexOf("PROC", ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "Incomplete PROC declaration at line $lineNumber, column ${columnStart + 1} - missing procedure name",
+                    columnStart,
+                    line.length
+                ))
+            }
+            
+            if (trimmed.matches(Regex("^FUNC\\s*$", RegexOption.IGNORE_CASE)) || 
+                trimmed.matches(Regex("^FUNC\\s+\\w+\\s*$", RegexOption.IGNORE_CASE))) {
+                val columnStart = line.indexOf("FUNC", ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "Incomplete FUNC declaration at line $lineNumber, column ${columnStart + 1} - missing return type or function name",
+                    columnStart,
+                    line.length
+                ))
+            }
+            
+            if (trimmed.matches(Regex("^TRAP\\s*$", RegexOption.IGNORE_CASE))) {
+                val columnStart = line.indexOf("TRAP", ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "Incomplete TRAP declaration at line $lineNumber, column ${columnStart + 1} - missing trap routine name",
+                    columnStart,
+                    line.length
+                ))
+            }
+            
+            // Check for incomplete MODULE declaration
+            if (trimmed.matches(Regex("^MODULE\\s*$", RegexOption.IGNORE_CASE))) {
+                val columnStart = line.indexOf("MODULE", ignoreCase = true)
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "Incomplete MODULE declaration at line $lineNumber, column ${columnStart + 1} - missing module name",
+                    columnStart,
+                    line.length
+                ))
+            }
+            
+            // Check for invalid RETURN statement usage
+            if (trimmed.matches(Regex("^RETURN\\s*$", RegexOption.IGNORE_CASE))) {
+                val columnStart = line.indexOf("RETURN", ignoreCase = true)
+                // Check if we're in a FUNC block (should return a value)
+                val inFunc = blockStack.any { it.type == "FUNC" }
+                if (inFunc) {
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "RETURN statement at line $lineNumber, column ${columnStart + 1} is missing return value - FUNC requires a return value",
+                        columnStart,
+                        line.length
+                    ))
+                }
+            }
+            
+            // Check for VAR/PERS/CONST without variable name
+            if (trimmed.matches(Regex("^(VAR|PERS|CONST)\\s*$", RegexOption.IGNORE_CASE)) ||
+                trimmed.matches(Regex("^(VAR|PERS|CONST)\\s+\\w+\\s*$", RegexOption.IGNORE_CASE))) {
+                val match = Regex("^(VAR|PERS|CONST)", RegexOption.IGNORE_CASE).find(trimmed)
+                if (match != null) {
+                    val keyword = match.value
+                    val columnStart = line.indexOf(keyword, ignoreCase = true)
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        "Incomplete variable declaration at line $lineNumber, column ${columnStart + 1} - missing variable name or type",
+                        columnStart,
+                        line.length
+                    ))
+                }
+            }
         }
         
         // Check for unclosed blocks - report with specific line numbers
@@ -541,6 +722,39 @@ class ABBParser {
     }
     
     data class BlockInfo(val type: String, val lineNumber: Int)
+    
+    /**
+     * Remove strings and comments from a line to simplify syntax checking
+     */
+    private fun removeStringsAndComments(line: String): String {
+        val result = StringBuilder()
+        var inString = false
+        var i = 0
+        
+        while (i < line.length) {
+            val char = line[i]
+            
+            // Check for comment start
+            if (!inString && char == '!' && i < line.length) {
+                // Rest of line is a comment
+                break
+            }
+            
+            // Check for string delimiter
+            if (char == '"') {
+                inString = !inString
+                result.append(' ') // Replace string content with space
+            } else if (!inString) {
+                result.append(char)
+            } else {
+                result.append(' ') // Replace string content with space
+            }
+            
+            i++
+        }
+        
+        return result.toString()
+    }
 }
 
 data class SyntaxError(
