@@ -44,6 +44,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed / 更改
 - 优化主题设计，采用流行的液态玻璃效果
 - 改进语法检查算法，提供更准确的验证
+- 优化语法错误消息的准确性，精确定位错误位置而非泛指 (Improved syntax error message accuracy to pinpoint exact error locations instead of vague descriptions)
+  - 区分"无开放块"和"错误的END语句"两种情况
+  - 显示开放块的具体行号和类型
+  - 明确指出期望的END语句类型
 - 增强代码查看器功能，支持编辑和替换
 - 改进文件处理逻辑，保持原始文件名
 

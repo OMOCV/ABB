@@ -246,8 +246,11 @@ class ABBParser {
                 }
                 trimmed.matches(Regex("^ENDMODULE\\s*.*", RegexOption.IGNORE_CASE)) -> {
                     endModuleCount++
-                    if (blockStack.isEmpty() || blockStack.last().type != "MODULE") {
-                        errors.add(SyntaxError(lineNumber, "ENDMODULE without matching MODULE at line $lineNumber"))
+                    if (blockStack.isEmpty()) {
+                        errors.add(SyntaxError(lineNumber, "ENDMODULE at line $lineNumber without any open block - missing MODULE declaration"))
+                    } else if (blockStack.last().type != "MODULE") {
+                        val openBlock = blockStack.last()
+                        errors.add(SyntaxError(lineNumber, "ENDMODULE at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -258,8 +261,11 @@ class ABBParser {
                     blockStack.add(BlockInfo("PROC", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDPROC\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    if (blockStack.isEmpty() || blockStack.last().type != "PROC") {
-                        errors.add(SyntaxError(lineNumber, "ENDPROC at line $lineNumber without matching PROC"))
+                    if (blockStack.isEmpty()) {
+                        errors.add(SyntaxError(lineNumber, "ENDPROC at line $lineNumber without any open block - missing PROC declaration"))
+                    } else if (blockStack.last().type != "PROC") {
+                        val openBlock = blockStack.last()
+                        errors.add(SyntaxError(lineNumber, "ENDPROC at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -270,8 +276,11 @@ class ABBParser {
                     blockStack.add(BlockInfo("FUNC", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDFUNC\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    if (blockStack.isEmpty() || blockStack.last().type != "FUNC") {
-                        errors.add(SyntaxError(lineNumber, "ENDFUNC at line $lineNumber without matching FUNC"))
+                    if (blockStack.isEmpty()) {
+                        errors.add(SyntaxError(lineNumber, "ENDFUNC at line $lineNumber without any open block - missing FUNC declaration"))
+                    } else if (blockStack.last().type != "FUNC") {
+                        val openBlock = blockStack.last()
+                        errors.add(SyntaxError(lineNumber, "ENDFUNC at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -282,8 +291,11 @@ class ABBParser {
                     blockStack.add(BlockInfo("TRAP", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDTRAP\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    if (blockStack.isEmpty() || blockStack.last().type != "TRAP") {
-                        errors.add(SyntaxError(lineNumber, "ENDTRAP at line $lineNumber without matching TRAP"))
+                    if (blockStack.isEmpty()) {
+                        errors.add(SyntaxError(lineNumber, "ENDTRAP at line $lineNumber without any open block - missing TRAP declaration"))
+                    } else if (blockStack.last().type != "TRAP") {
+                        val openBlock = blockStack.last()
+                        errors.add(SyntaxError(lineNumber, "ENDTRAP at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -294,8 +306,11 @@ class ABBParser {
                     blockStack.add(BlockInfo("IF", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDIF\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    if (blockStack.isEmpty() || blockStack.last().type != "IF") {
-                        errors.add(SyntaxError(lineNumber, "ENDIF at line $lineNumber without matching IF"))
+                    if (blockStack.isEmpty()) {
+                        errors.add(SyntaxError(lineNumber, "ENDIF at line $lineNumber without any open block - missing IF statement"))
+                    } else if (blockStack.last().type != "IF") {
+                        val openBlock = blockStack.last()
+                        errors.add(SyntaxError(lineNumber, "ENDIF at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -306,8 +321,11 @@ class ABBParser {
                     blockStack.add(BlockInfo("FOR", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDFOR\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    if (blockStack.isEmpty() || blockStack.last().type != "FOR") {
-                        errors.add(SyntaxError(lineNumber, "ENDFOR at line $lineNumber without matching FOR"))
+                    if (blockStack.isEmpty()) {
+                        errors.add(SyntaxError(lineNumber, "ENDFOR at line $lineNumber without any open block - missing FOR loop"))
+                    } else if (blockStack.last().type != "FOR") {
+                        val openBlock = blockStack.last()
+                        errors.add(SyntaxError(lineNumber, "ENDFOR at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -318,8 +336,11 @@ class ABBParser {
                     blockStack.add(BlockInfo("WHILE", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDWHILE\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    if (blockStack.isEmpty() || blockStack.last().type != "WHILE") {
-                        errors.add(SyntaxError(lineNumber, "ENDWHILE at line $lineNumber without matching WHILE"))
+                    if (blockStack.isEmpty()) {
+                        errors.add(SyntaxError(lineNumber, "ENDWHILE at line $lineNumber without any open block - missing WHILE loop"))
+                    } else if (blockStack.last().type != "WHILE") {
+                        val openBlock = blockStack.last()
+                        errors.add(SyntaxError(lineNumber, "ENDWHILE at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
@@ -330,8 +351,11 @@ class ABBParser {
                     blockStack.add(BlockInfo("TEST", lineNumber))
                 }
                 trimmed.matches(Regex("^ENDTEST\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                    if (blockStack.isEmpty() || blockStack.last().type != "TEST") {
-                        errors.add(SyntaxError(lineNumber, "ENDTEST at line $lineNumber without matching TEST"))
+                    if (blockStack.isEmpty()) {
+                        errors.add(SyntaxError(lineNumber, "ENDTEST at line $lineNumber without any open block - missing TEST statement"))
+                    } else if (blockStack.last().type != "TEST") {
+                        val openBlock = blockStack.last()
+                        errors.add(SyntaxError(lineNumber, "ENDTEST at line $lineNumber does not match open ${openBlock.type} block at line ${openBlock.lineNumber} - expected END${openBlock.type}"))
                     } else {
                         blockStack.removeAt(blockStack.size - 1)
                     }
