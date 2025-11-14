@@ -22,8 +22,10 @@
     <string name="no_bookmarks">No bookmarks</string>
     <string name="view_bookmarks">View Bookmarks</string>
     <string name="line_number">Line %s</string>
+    <string name="line_column_number">Line %s, Column %s</string>
     <string name="line_number_hint">Enter line number</string>
     <string name="jumped_to_line">Jumped to line %d</string>
+    <string name="jumped_to_line_column">Jumped to line %d, column %d</string>
     <string name="format_code">Format Code</string>
     <string name="code_formatted">Code formatted</string>
     <string name="check_syntax">Check Syntax</string>

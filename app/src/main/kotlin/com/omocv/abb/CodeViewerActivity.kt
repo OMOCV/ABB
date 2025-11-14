@@ -848,12 +848,13 @@ class CodeViewerActivity : AppCompatActivity() {
                 }
             }
             
-            val columnInfo = if (columnStart > 0 || columnEnd > 0) {
-                ", column ${columnStart + 1}"
+            // Show appropriate jump notification with line and column info
+            val message = if (columnStart >= 0) {
+                getString(R.string.jumped_to_line_column, lineNumber, columnStart + 1)
             } else {
-                ""
+                getString(R.string.jumped_to_line, lineNumber)
             }
-            Toast.makeText(this, "Jumped to line $lineNumber$columnInfo", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
         }
     }
     
