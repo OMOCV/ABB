@@ -25,6 +25,7 @@
     <string name="line_column_number">行 %s, 列 %s</string>
     <string name="line_number_hint">输入行号</string>
     <string name="jumped_to_line">跳转到行 %d</string>
+    <string name="jumped_to_line_column">跳转到行 %d, 列 %d</string>
     <string name="format_code">格式化代码</string>
     <string name="code_formatted">代码已格式化</string>
     <string name="check_syntax">检查语法</string>
