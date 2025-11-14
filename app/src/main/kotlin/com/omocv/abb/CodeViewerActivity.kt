@@ -942,7 +942,7 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun highlightLineAndColumn(lineNumber: Int, columnStart: Int, columnEnd: Int) {
-        // Highlight a specific column range within a line
+        // Highlight the entire line (not just the error range) with a distinct error color
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val lines = content.lines()
         
@@ -956,14 +956,8 @@ class CodeViewerActivity : AppCompatActivity() {
                 lineStartPos += lines[i].length + 1
             }
             
-            // Calculate the exact character positions for the error range
-            val errorStartPos = lineStartPos + columnStart
-            val errorEndPos = if (columnEnd > columnStart) {
-                lineStartPos + columnEnd
-            } else {
-                // If columnEnd is 0 or not set, highlight the rest of the line
-                lineStartPos + lines[lineNumber - 1].length
-            }
+            // Highlight the ENTIRE line, not just the error column range
+            val lineEndPos = lineStartPos + lines[lineNumber - 1].length
             
             // Use a more visible highlight color - different for error highlighting
             val highlightColor = if (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES) {
@@ -973,7 +967,7 @@ class CodeViewerActivity : AppCompatActivity() {
             }
             
             if (isEditMode) {
-                // Apply highlighting in edit mode
+                // Apply highlighting in edit mode to the entire line
                 val editableContent = etCodeContent.text
                 if (editableContent is Spannable) {
                     // Remove previous highlight span if it exists
@@ -981,24 +975,24 @@ class CodeViewerActivity : AppCompatActivity() {
                         editableContent.removeSpan(currentHighlightSpan)
                     }
                     
-                    // Create and apply new highlight span for the specific error range
+                    // Create and apply new highlight span for the entire line
                     currentHighlightSpan = BackgroundColorSpan(highlightColor)
                     editableContent.setSpan(
                         currentHighlightSpan,
-                        errorStartPos.coerceAtMost(editableContent.length),
-                        errorEndPos.coerceAtMost(editableContent.length),
+                        lineStartPos,
+                        lineEndPos.coerceAtMost(editableContent.length),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                     )
                 }
             } else {
                 // Apply syntax highlighting first in view mode
                 val highlighted = syntaxHighlighter.highlight(content)
-                // Then add the background span to the highlighted text for the specific error range
+                // Then add the background span to the entire line
                 val finalSpannable = SpannableString(highlighted)
                 finalSpannable.setSpan(
                     BackgroundColorSpan(highlightColor),
-                    errorStartPos.coerceAtMost(finalSpannable.length),
-                    errorEndPos.coerceAtMost(finalSpannable.length),
+                    lineStartPos.coerceAtMost(finalSpannable.length),
+                    lineEndPos.coerceAtMost(finalSpannable.length),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
                 tvCodeContent.text = finalSpannable
