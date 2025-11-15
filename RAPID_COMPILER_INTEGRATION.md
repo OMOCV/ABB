@@ -439,6 +439,29 @@ fun testUndefinedVariable() {
 
 ### 新增文件 / New Files
 - ✅ `RAPID_COMPILER_INTEGRATION.md` - 本整合总结文档
+- ✅ `app/src/main/kotlin/com/omocv/abb/rapid/RapidCompilerExample.kt` - 使用示例代码
+
+---
+
+## 快速开始 / Quick Start
+
+查看 `RapidCompilerExample.kt` 文件了解如何使用 RapidCompiler：
+
+See `RapidCompilerExample.kt` for examples of using the RapidCompiler:
+
+```bash
+# 运行示例 / Run examples
+cd app/src/main/kotlin/com/omocv/abb/rapid
+# 在 IDE 中运行 RapidCompilerExample.main() 
+# Or run RapidCompilerExample.main() in your IDE
+```
+
+示例包括 / Examples include:
+1. 基本语法检查 / Basic syntax checking
+2. 语法错误检测 / Syntax error detection
+3. AST 访问 / AST access
+4. 类型检查 / Type checking
+5. 未定义变量检测 / Undefined variable detection
 
 ---
 
