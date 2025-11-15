@@ -1,5 +1,8 @@
 package com.omocv.abb
 
+import com.omocv.abb.rapid.RapidCompiler
+import com.omocv.abb.rapid.Diagnostic as RapidDiagnostic
+import com.omocv.abb.rapid.Severity
 import java.io.File
 
 /**
@@ -219,7 +222,24 @@ class ABBParser {
     }
     
     /**
+     * Enhanced syntax validation using the RapidCompiler with full AST parsing
+     * This provides more accurate and comprehensive syntax checking
+     */
+    fun validateSyntaxEnhanced(content: String): List<SyntaxError> {
+        val result = RapidCompiler.analyze(content)
+        return result.diagnostics.map { diagnostic ->
+            SyntaxError(
+                lineNumber = diagnostic.span.startLine,
+                message = diagnostic.message,
+                columnStart = diagnostic.span.startCol - 1, // Convert to 0-based
+                columnEnd = diagnostic.span.endCol - 1      // Convert to 0-based
+            )
+        }
+    }
+
+    /**
      * Comprehensive syntax validation for RAPID code with Chinese error messages
+     * Note: Consider using validateSyntaxEnhanced() for more accurate checking
      */
     fun validateSyntax(content: String): List<SyntaxError> {
         val errors = mutableListOf<SyntaxError>()
