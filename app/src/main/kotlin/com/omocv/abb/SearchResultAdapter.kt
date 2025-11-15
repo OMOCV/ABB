@@ -1,6 +1,5 @@
 package com.omocv.abb
 
-import android.graphics.Color
 import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.BackgroundColorSpan
@@ -50,7 +49,7 @@ class SearchResultAdapter(
         val startIdx = result.lineContent.indexOf(searchQuery, ignoreCase = true)
         if (startIdx >= 0) {
             spannable.setSpan(
-                BackgroundColorSpan(Color.YELLOW),
+                BackgroundColorSpan(HighlightColors.getSearchHighlightColor(holder.itemView.context)),
                 startIdx,
                 startIdx + searchQuery.length,
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE

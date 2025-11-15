@@ -874,12 +874,8 @@ class CodeViewerActivity : AppCompatActivity() {
             }
             val endPos = startPos + lines[lineNumber - 1].length
             
-            // Use a more visible highlight color
-            val highlightColor = if (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES) {
-                Color.parseColor("#4A4A00") // Yellow-tinted dark background for dark theme (more visible)
-            } else {
-                Color.parseColor("#FFFF00") // Bright yellow for light theme (more visible)
-            }
+            // Use centralized highlight color management
+            val highlightColor = HighlightColors.getLineHighlightColor(this)
             
             if (isEditMode) {
                 // Apply highlighting in edit mode
@@ -959,12 +955,8 @@ class CodeViewerActivity : AppCompatActivity() {
             // Highlight the ENTIRE line, not just the error column range
             val lineEndPos = lineStartPos + lines[lineNumber - 1].length
             
-            // Use a more visible highlight color - different for error highlighting
-            val highlightColor = if (AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES) {
-                Color.parseColor("#6A3030") // Red-tinted dark background for errors in dark theme
-            } else {
-                Color.parseColor("#FFB3BA") // Light red/pink for errors in light theme
-            }
+            // Use centralized error highlight color management
+            val highlightColor = HighlightColors.getErrorHighlightColor(this)
             
             if (isEditMode) {
                 // Apply highlighting in edit mode to the entire line
