@@ -23,8 +23,8 @@ MODULE TestIncompleteKeywords
         ! Test 6: Incomplete TPWrite
         TPWrit "Hello";
         
-        ! Test 7: Incomplete MoveAbsJ (missing letter)
-        MoveAbsJ Home\NoEOffs, v1000, fine, tool0;
+        ! Test 7: Incomplete MoveAbsJ (missing letter 'J')
+        MoveAbs Home\NoEOffs, v1000, fine, tool0;
         
         ! Test 8: Correct instructions (should not error)
         WaitTime 1.0;
