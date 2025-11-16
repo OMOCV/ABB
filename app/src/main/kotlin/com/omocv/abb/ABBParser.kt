@@ -34,6 +34,93 @@ class ABBParser {
             "robtarget", "jointtarget", "speeddata", "zonedata", "tooldata", "wobjdata",
             "loaddata", "clock", "intnum"
         )
+        
+        // Common RAPID instructions that should be spell-checked
+        val INSTRUCTIONS = setOf(
+            // Motion instructions
+            "MoveJ", "MoveL", "MoveC", "MoveAbsJ", "MoveLDO", "MoveJDO",
+            "SearchL", "SearchC", "TriggJ", "TriggL", "TriggC",
+            // I/O instructions
+            "SetDO", "SetAO", "SetGO", "PulseDO", "Reset",
+            "WaitDI", "WaitAI", "WaitTime", "WaitUntil",
+            // Program flow
+            "Stop", "Exit", "ErrWrite", "ErrRaise",
+            // String/output
+            "TPWrite", "TPReadNum", "TPReadFK", "TPReadDnum", "TPShow",
+            "TPErase", "TPReadFK",
+            // Math and utility
+            "AccSet", "VelSet", "PathAccLim", "SingArea",
+            "ConfL", "ConfJ", "ActUnit", "DeactUnit",
+            // Common functions
+            "Abs", "Round", "Trunc", "Sqrt", "Pow",
+            "Sin", "Cos", "Tan", "ASin", "ACos", "ATan", "ATan2",
+            "Exp", "Log", "Ln",
+            "Distance", "DotProd", "NOrient", "OrientZYX",
+            "PoseInv", "PoseMult", "PoseVect",
+            "Present", "IsPers", "Dim"
+        )
+        
+        /**
+         * Calculate Levenshtein distance between two strings
+         */
+        private fun levenshteinDistance(s1: String, s2: String): Int {
+            val len1 = s1.length
+            val len2 = s2.length
+            
+            val dp = Array(len1 + 1) { IntArray(len2 + 1) }
+            
+            for (i in 0..len1) dp[i][0] = i
+            for (j in 0..len2) dp[0][j] = j
+            
+            for (i in 1..len1) {
+                for (j in 1..len2) {
+                    val cost = if (s1[i - 1].equals(s2[j - 1], ignoreCase = true)) 0 else 1
+                    dp[i][j] = minOf(
+                        dp[i - 1][j] + 1,      // deletion
+                        dp[i][j - 1] + 1,      // insertion
+                        dp[i - 1][j - 1] + cost // substitution
+                    )
+                }
+            }
+            
+            return dp[len1][len2]
+        }
+        
+        /**
+         * Find the closest matching keyword for a potentially misspelled word
+         */
+        private fun findClosestKeyword(word: String): Pair<String, Int>? {
+            val allKnownWords = KEYWORDS + DATA_TYPES + INSTRUCTIONS
+            
+            // Only check words that start with uppercase or known instruction patterns
+            if (word.isEmpty() || (!word[0].isUpperCase() && word[0] != word[0].lowercase()[0])) {
+                return null
+            }
+            
+            var closestMatch: String? = null
+            var minDistance = Int.MAX_VALUE
+            
+            for (knownWord in allKnownWords) {
+                // Calculate distance
+                val distance = levenshteinDistance(word, knownWord)
+                
+                // Consider it a potential typo if:
+                // 1. Distance is 1-3 (small typos)
+                // 2. Or the word is a prefix of the known word (incomplete typing)
+                // 3. Or the word shares at least 60% of characters with known word
+                val isPrefix = knownWord.startsWith(word, ignoreCase = true) && word.length >= 3
+                val similarity = 1.0 - (distance.toDouble() / maxOf(word.length, knownWord.length))
+                
+                if (isPrefix || (distance in 1..3 && similarity >= 0.5)) {
+                    if (distance < minDistance) {
+                        minDistance = distance
+                        closestMatch = knownWord
+                    }
+                }
+            }
+            
+            return if (closestMatch != null) Pair(closestMatch, minDistance) else null
+        }
     }
 
     /**
@@ -272,6 +359,9 @@ class ABBParser {
             checkDeclarations(trimmed, line, lineNumber, errors)
             checkReturnStatements(trimmed, lineNumber, blockStack, errors)
             checkIncompleteFunctionCalls(trimmed, lineNumber, errors)
+            
+            // Check for misspelled/incomplete keywords and instructions
+            checkIncompleteKeywords(line, lineNumber, errors)
         }
         
         // Check for unclosed blocks
@@ -757,6 +847,74 @@ class ABBParser {
                 block.lineNumber, 
                 "第 ${block.lineNumber} 行：${block.type} 代码块未闭合 - 缺少 END${block.type}\n建议：在代码块结束位置添加 END${block.type}"
             ))
+        }
+    }
+    
+    /**
+     * Check for incomplete or misspelled keywords and instructions
+     * This addresses the issue where incomplete keywords like "VA" (should be "VAR"),
+     * "WaitTim" (should be "WaitTime"), etc. are not detected
+     */
+    private fun checkIncompleteKeywords(line: String, lineNumber: Int, errors: MutableList<SyntaxError>) {
+        // Remove strings and comments first
+        val cleanLine = removeStringsAndComments(line)
+        
+        // Tokenize the line into words
+        val tokenRegex = Regex("\\b[a-zA-Z_][a-zA-Z0-9_]*\\b")
+        val matches = tokenRegex.findAll(cleanLine)
+        
+        for (match in matches) {
+            val word = match.value
+            val startPos = match.range.first
+            
+            // Skip if it's already a known keyword, instruction, or data type
+            val allKnownWords = KEYWORDS + DATA_TYPES + INSTRUCTIONS
+            if (allKnownWords.any { it.equals(word, ignoreCase = true) }) {
+                continue
+            }
+            
+            // Skip common variable patterns (lowercase words, mixed case that looks like variables)
+            if (word.all { it.isLowerCase() || it == '_' || it.isDigit() }) {
+                continue
+            }
+            
+            // Skip if it looks like a number or hex value
+            if (word.matches(Regex("^[0-9]+$")) || word.matches(Regex("^0x[0-9a-fA-F]+$"))) {
+                continue
+            }
+            
+            // Find closest matching keyword
+            val closestMatch = findClosestKeyword(word)
+            
+            if (closestMatch != null) {
+                val (suggestion, distance) = closestMatch
+                
+                // Determine if it's likely a typo
+                val isLikelyTypo = when {
+                    // If it's a prefix (incomplete word), it's very likely a typo
+                    suggestion.startsWith(word, ignoreCase = true) && word.length >= 3 -> true
+                    // If distance is 1-2, it's likely a simple typo
+                    distance in 1..2 -> true
+                    // If distance is 3 and words are similar enough
+                    distance == 3 && word.length >= 5 -> true
+                    else -> false
+                }
+                
+                if (isLikelyTypo) {
+                    val errorMsg = if (suggestion.startsWith(word, ignoreCase = true)) {
+                        "第 $lineNumber 行，第 ${startPos + 1} 列：关键字或指令不完整 '$word'\n建议：可能是 '$suggestion'（缺少部分字母）"
+                    } else {
+                        "第 $lineNumber 行，第 ${startPos + 1} 列：可能存在拼写错误 '$word'\n建议：是否应该是 '$suggestion'？"
+                    }
+                    
+                    errors.add(SyntaxError(
+                        lineNumber,
+                        errorMsg,
+                        startPos,
+                        startPos + word.length
+                    ))
+                }
+            }
         }
     }
     
