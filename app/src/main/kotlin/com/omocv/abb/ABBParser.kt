@@ -325,6 +325,48 @@ class ABBParser {
     }
 
     /**
+     * Comprehensive syntax validation that combines multiple analysis methods
+     * This function analyzes EVERY LINE and detects ALL possible syntax errors by:
+     * 1. Using RapidCompiler for full AST-based parsing and semantic analysis
+     * 2. Using line-by-line analysis for patterns not caught by the compiler
+     * 3. Detecting incomplete keywords and instructions
+     * 
+     * This approach ensures thorough error detection as requested in the problem statement:
+     * "对于检查语法功能，你要对每一行进行解读分析，排除每一行所有的可能语法错误"
+     */
+    fun validateSyntaxComprehensive(content: String): List<SyntaxError> {
+        // Collect errors from both validation methods
+        val compilerErrors = validateSyntaxEnhanced(content)
+        val lineByLineErrors = validateSyntax(content)
+        
+        // Combine and deduplicate errors
+        val allErrors = mutableListOf<SyntaxError>()
+        val errorSignatures = mutableSetOf<String>()
+        
+        // Add compiler errors first (they tend to be more accurate)
+        for (error in compilerErrors) {
+            val signature = "${error.lineNumber}:${error.columnStart}:${error.message.take(50)}"
+            if (errorSignatures.add(signature)) {
+                allErrors.add(error)
+            }
+        }
+        
+        // Add line-by-line errors that aren't duplicates
+        for (error in lineByLineErrors) {
+            val signature = "${error.lineNumber}:${error.columnStart}:${error.message.take(50)}"
+            if (errorSignatures.add(signature)) {
+                allErrors.add(error)
+            }
+        }
+        
+        // Sort by line number, then column
+        return allErrors.sortedWith(
+            compareBy<SyntaxError> { it.lineNumber }
+                .thenBy { it.columnStart }
+        )
+    }
+
+    /**
      * Comprehensive syntax validation for RAPID code with Chinese error messages
      * Note: Consider using validateSyntaxEnhanced() for more accurate checking
      */

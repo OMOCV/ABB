@@ -375,7 +375,11 @@ class Lexer(private val source: String) {
                         "WITH" -> TokenType.WITH
                         "RAISE" -> TokenType.RAISE
                         "RECORD" -> TokenType.RECORD
-                        else -> TokenType.IDENT
+                        else -> {
+                            // Check for incomplete keywords (e.g., "VA" instead of "VAR", "PER" instead of "PERS")
+                            checkIncompleteKeyword(ident, startLine, startCol)
+                            TokenType.IDENT
+                        }
                     }
                     tokens.add(Token(type, ident, makeSpan(startLine, startCol)))
                 }
@@ -520,6 +524,129 @@ class Lexer(private val source: String) {
             sb.append(advance())
         }
         return sb.toString()
+    }
+
+    /**
+     * Check if an identifier looks like an incomplete or misspelled keyword/instruction
+     * This helps detect errors like "VA" instead of "VAR", "WaitTim" instead of "WaitTime"
+     */
+    private fun checkIncompleteKeyword(word: String, startLine: Int, startCol: Int) {
+        // Define all known RAPID keywords and common instructions
+        val knownKeywords = setOf(
+            "MODULE", "ENDMODULE", "PROC", "ENDPROC", "FUNC", "ENDFUNC", "TRAP", "ENDTRAP",
+            "VAR", "PERS", "CONST", "ALIAS", "LOCAL", "TASK",
+            "IF", "THEN", "ELSEIF", "ELSE", "ENDIF",
+            "FOR", "FROM", "TO", "STEP", "DO", "ENDFOR",
+            "WHILE", "ENDWHILE",
+            "TEST", "CASE", "DEFAULT", "ENDTEST",
+            "GOTO", "LABEL", "RETURN", "EXIT",
+            "TRUE", "FALSE", "AND", "OR", "NOT", "XOR", "DIV", "MOD",
+            "RECORD", "CONNECT", "WITH", "RAISE"
+        )
+        
+        val knownInstructions = setOf(
+            "MoveJ", "MoveL", "MoveC", "MoveAbsJ", "MoveLDO", "MoveJDO",
+            "SearchL", "SearchC", "TriggJ", "TriggL", "TriggC",
+            "SetDO", "SetAO", "SetGO", "PulseDO", "Reset",
+            "WaitDI", "WaitAI", "WaitTime", "WaitUntil",
+            "Stop", "Exit", "ErrWrite", "ErrRaise",
+            "TPWrite", "TPReadNum", "TPReadFK", "TPReadDnum", "TPShow", "TPErase",
+            "AccSet", "VelSet", "PathAccLim", "SingArea",
+            "ConfL", "ConfJ", "ActUnit", "DeactUnit",
+            "Abs", "Round", "Trunc", "Sqrt", "Pow",
+            "Sin", "Cos", "Tan", "ASin", "ACos", "ATan", "ATan2",
+            "Exp", "Log", "Ln",
+            "Distance", "DotProd", "NOrient", "OrientZYX",
+            "PoseInv", "PoseMult", "PoseVect",
+            "Present", "IsPers", "Dim"
+        )
+        
+        val knownDataTypes = setOf(
+            "num", "dnum", "bool", "string", "pos", "orient", "pose", "confdata",
+            "robtarget", "jointtarget", "speeddata", "zonedata", "tooldata", "wobjdata",
+            "loaddata", "clock", "intnum"
+        )
+        
+        val allKnownWords = knownKeywords + knownInstructions + knownDataTypes
+        
+        // Skip if word is already recognized
+        val upperWord = word.uppercase()
+        if (allKnownWords.any { it.equals(word, ignoreCase = true) }) {
+            return
+        }
+        
+        // Skip lowercase variable-like names
+        if (word.all { it.isLowerCase() || it == '_' || it.isDigit() }) {
+            return
+        }
+        
+        // Skip numeric-like patterns
+        if (word.matches(Regex("^[0-9]+$")) || word.matches(Regex("^0x[0-9a-fA-F]+$"))) {
+            return
+        }
+        
+        // Find closest match
+        var closestMatch: String? = null
+        var minDistance = Int.MAX_VALUE
+        
+        for (known in allKnownWords) {
+            // Check if it's a prefix (incomplete word)
+            if (known.startsWith(word, ignoreCase = true) && word.length >= 2) {
+                closestMatch = known
+                minDistance = 0
+                break
+            }
+            
+            // Calculate edit distance
+            val distance = levenshteinDistance(word, known)
+            if (distance < minDistance && distance <= 3) {
+                minDistance = distance
+                closestMatch = known
+            }
+        }
+        
+        // Report error if a close match was found
+        if (closestMatch != null && (minDistance == 0 || (minDistance <= 2 && word.length >= 3))) {
+            val message = if (minDistance == 0) {
+                "第 $startLine 行，第 $startCol 列：关键字或指令不完整 '$word'\n建议：可能是 '$closestMatch'（缺少部分字母）"
+            } else {
+                "第 $startLine 行，第 $startCol 列：可能存在拼写错误 '$word'\n建议：是否应该是 '$closestMatch'？"
+            }
+            
+            diagnostics.add(
+                Diagnostic(
+                    message,
+                    Span(startLine, startCol, startLine, startCol + word.length),
+                    Severity.WARNING
+                )
+            )
+        }
+    }
+    
+    /**
+     * Calculate Levenshtein distance between two strings (edit distance)
+     */
+    private fun levenshteinDistance(s1: String, s2: String): Int {
+        val len1 = s1.length
+        val len2 = s2.length
+        
+        val dp = Array(len1 + 1) { IntArray(len2 + 1) }
+        
+        for (i in 0..len1) dp[i][0] = i
+        for (j in 0..len2) dp[0][j] = j
+        
+        for (i in 1..len1) {
+            for (j in 1..len2) {
+                val cost = if (s1[i - 1].equals(s2[j - 1], ignoreCase = true)) 0 else 1
+                dp[i][j] = minOf(
+                    dp[i - 1][j] + 1,      // deletion
+                    dp[i][j - 1] + 1,      // insertion
+                    dp[i - 1][j - 1] + cost // substitution
+                )
+            }
+        }
+        
+        return dp[len1][len2]
     }
 }
 

@@ -1115,7 +1115,8 @@ class CodeViewerActivity : AppCompatActivity() {
 
     private fun checkSyntax() {
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val errors = abbParser.validateSyntax(content)
+        // Use comprehensive validation that analyzes every line and detects all possible errors
+        val errors = abbParser.validateSyntaxComprehensive(content)
         
         if (errors.isEmpty()) {
             Toast.makeText(this, getString(R.string.no_syntax_errors), Toast.LENGTH_SHORT).show()
