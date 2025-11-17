@@ -944,7 +944,13 @@ class ABBParser {
                 }
                 // Position 2 is the function name (user-defined, don't check)
             }
-            firstWord in setOf("MODULE", "ENDMODULE", "ENDPROC", "ENDFUNC", "ENDTRAP") -> {
+            firstWord == "RECORD" -> {
+                positionsToCheck.add(0) // The keyword itself
+                // Position 1 is the record name (user-defined, don't check)
+                // For RECORD field types, they appear after opening paren, harder to detect in simple line parsing
+                // The RapidCompiler handles this better, so we'll rely on that
+            }
+            firstWord in setOf("MODULE", "ENDMODULE", "ENDPROC", "ENDFUNC", "ENDTRAP", "ENDTEST") -> {
                 positionsToCheck.add(0) // Just check the keyword
                 // Position 1 for MODULE is the module name (user-defined, don't check)
             }

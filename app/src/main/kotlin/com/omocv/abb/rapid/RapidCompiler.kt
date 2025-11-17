@@ -785,12 +785,16 @@ class Parser(private val tokens: List<Token>) {
     private fun parseRecordDecl(): RecordDecl {
         val recTok = expect(TokenType.RECORD, "期望 RECORD")
         val nameTok = expect(TokenType.IDENT, "RECORD 后需要名称")
+        // nameTok is user-defined, don't check it
         expect(TokenType.LPAREN, "RECORD 需要 '('")
         val fields = mutableListOf<RecordField>()
         if (!match(TokenType.RPAREN)) {
             while (true) {
                 val typeTok = expect(TokenType.IDENT, "RECORD 字段需要类型")
+                // Check if field type looks incomplete
+                checkDataType(typeTok.lexeme, typeTok.span)
                 val fieldTok = expect(TokenType.IDENT, "RECORD 字段需要名字")
+                // fieldTok is user-defined, don't check it
                 fields.add(RecordField(typeTok.lexeme, fieldTok.lexeme, mergeSpan(typeTok.span, fieldTok.span)))
                 if (match(TokenType.COMMA)) continue
                 break
