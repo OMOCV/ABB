@@ -896,16 +896,87 @@ class ABBParser {
      * Check for incomplete or misspelled keywords and instructions
      * This addresses the issue where incomplete keywords like "VA" (should be "VAR"),
      * "WaitTim" (should be "WaitTime"), etc. are not detected
+     * 
+     * IMPORTANT: This function now checks context to avoid flagging user-defined names
+     * (procedure names, variable names, etc.) as errors. It only checks identifiers that
+     * appear in positions where keywords/instructions are expected.
      */
     private fun checkIncompleteKeywords(line: String, lineNumber: Int, errors: MutableList<SyntaxError>) {
         // Remove strings and comments first
         val cleanLine = removeStringsAndComments(line)
+        val trimmed = cleanLine.trim()
+        
+        // Skip empty lines
+        if (trimmed.isEmpty()) return
         
         // Tokenize the line into words
         val tokenRegex = Regex("\\b[a-zA-Z_][a-zA-Z0-9_]*\\b")
-        val matches = tokenRegex.findAll(cleanLine)
+        val matches = tokenRegex.findAll(cleanLine).toList()
         
-        for (match in matches) {
+        if (matches.isEmpty()) return
+        
+        // Determine the context from the first token
+        val firstWord = matches.first().value.uppercase()
+        
+        // Define positions where we should check vs. skip checking
+        // For example, in "PROC Main()" we check PROC but not Main
+        // In "VAR num counter;" we check VAR and num but not counter
+        val positionsToCheck = mutableSetOf<Int>()
+        
+        when {
+            // Declaration keywords: check position 0 (keyword) and position 1 (type if VAR/PERS/CONST)
+            firstWord in setOf("VAR", "PERS", "CONST") -> {
+                positionsToCheck.add(0) // The keyword itself (though it's already recognized)
+                if (matches.size >= 2) {
+                    positionsToCheck.add(1) // The data type
+                }
+                // Position 2 would be the variable name (user-defined, don't check)
+            }
+            // Procedure/function declarations: check position 0 (keyword) only, or position 1 for return type in FUNC
+            firstWord in setOf("PROC", "TRAP") -> {
+                positionsToCheck.add(0) // The keyword itself
+                // Position 1 is the procedure/trap name (user-defined, don't check)
+            }
+            firstWord == "FUNC" -> {
+                positionsToCheck.add(0) // The keyword itself
+                if (matches.size >= 2) {
+                    positionsToCheck.add(1) // The return type
+                }
+                // Position 2 is the function name (user-defined, don't check)
+            }
+            firstWord == "RECORD" -> {
+                positionsToCheck.add(0) // The keyword itself
+                // Position 1 is the record name (user-defined, don't check)
+                // For RECORD field types, they appear after opening paren, harder to detect in simple line parsing
+                // The RapidCompiler handles this better, so we'll rely on that
+            }
+            firstWord in setOf("MODULE", "ENDMODULE", "ENDPROC", "ENDFUNC", "ENDTRAP", "ENDTEST") -> {
+                positionsToCheck.add(0) // Just check the keyword
+                // Position 1 for MODULE is the module name (user-defined, don't check)
+            }
+            // Control structures: check the keywords only
+            firstWord in setOf("IF", "WHILE", "FOR", "TEST", "RETURN") -> {
+                positionsToCheck.add(0) // The keyword
+                // The rest are expressions/variables (don't check)
+            }
+            // For statements starting with a potential instruction call (like WaitTime, TPWrite)
+            // Check position 0 as it should be an instruction
+            else -> {
+                // This could be an instruction call or an assignment
+                // Check the first word if it looks like an instruction (starts with uppercase)
+                val firstToken = matches.first().value
+                if (firstToken.isNotEmpty() && firstToken[0].isUpperCase()) {
+                    positionsToCheck.add(0)
+                }
+            }
+        }
+        
+        // Now check only the positions we identified
+        for ((index, match) in matches.withIndex()) {
+            if (index !in positionsToCheck) {
+                continue // Skip user-defined names
+            }
+            
             val word = match.value
             val startPos = match.range.first
             

@@ -376,8 +376,8 @@ class Lexer(private val source: String) {
                         "RAISE" -> TokenType.RAISE
                         "RECORD" -> TokenType.RECORD
                         else -> {
-                            // Check for incomplete keywords (e.g., "VA" instead of "VAR", "PER" instead of "PERS")
-                            checkIncompleteKeyword(ident, startLine, startCol)
+                            // Don't check incomplete keywords here - identifiers could be user-defined names
+                            // (procedure names, variable names, etc.). Context-aware checking happens during parsing.
                             TokenType.IDENT
                         }
                     }
@@ -730,7 +730,10 @@ class Parser(private val tokens: List<Token>) {
             else -> throw ParseException("storage")
         }
         val typeTok = expect(TokenType.IDENT, "变量声明需要类型")
+        // Check if the type looks like an incomplete data type
+        checkDataType(typeTok.lexeme, typeTok.span)
         val nameTok = expect(TokenType.IDENT, "变量声明需要名字")
+        // nameTok is user-defined, don't check it
         var initExpr: ExprNode? = null
         if (match(TokenType.ASSIGN)) {
             initExpr = parseExpression()
@@ -744,16 +747,54 @@ class Parser(private val tokens: List<Token>) {
             mergeSpan(storageTok.span, semi.span)
         )
     }
+    
+    /**
+     * Check if a data type looks incomplete or misspelled (e.g., "nu" instead of "num")
+     */
+    private fun checkDataType(typeName: String, span: Span) {
+        val knownDataTypes = setOf(
+            "num", "dnum", "bool", "string", "pos", "orient", "pose", "confdata",
+            "robtarget", "jointtarget", "speeddata", "zonedata", "tooldata", "wobjdata",
+            "loaddata", "clock", "intnum", "dionum", "signaldi", "signalai", "signaldo", "signalao"
+        )
+        
+        // If it's already a known type, no problem
+        if (knownDataTypes.any { it.equals(typeName, ignoreCase = true) }) {
+            return
+        }
+        
+        // Check for close matches
+        for (known in knownDataTypes) {
+            // Check if it's a prefix (incomplete type)
+            if (known.startsWith(typeName, ignoreCase = true) && typeName.length >= 2) {
+                val message = "第 ${span.startLine} 行，第 ${span.startCol} 列：数据类型不完整 '$typeName'\n建议：可能是 '$known'（缺少部分字母）"
+                diagnostics.add(Diagnostic(message, span, Severity.WARNING))
+                return
+            }
+            
+            // Calculate edit distance for possible typos
+            val distance = levenshteinDistance(typeName, known)
+            if (distance <= 2 && typeName.length >= 3) {
+                val message = "第 ${span.startLine} 行，第 ${span.startCol} 列：可能存在拼写错误 '$typeName'\n建议：是否应该是 '$known'？"
+                diagnostics.add(Diagnostic(message, span, Severity.WARNING))
+                return
+            }
+        }
+    }
 
     private fun parseRecordDecl(): RecordDecl {
         val recTok = expect(TokenType.RECORD, "期望 RECORD")
         val nameTok = expect(TokenType.IDENT, "RECORD 后需要名称")
+        // nameTok is user-defined, don't check it
         expect(TokenType.LPAREN, "RECORD 需要 '('")
         val fields = mutableListOf<RecordField>()
         if (!match(TokenType.RPAREN)) {
             while (true) {
                 val typeTok = expect(TokenType.IDENT, "RECORD 字段需要类型")
+                // Check if field type looks incomplete
+                checkDataType(typeTok.lexeme, typeTok.span)
                 val fieldTok = expect(TokenType.IDENT, "RECORD 字段需要名字")
+                // fieldTok is user-defined, don't check it
                 fields.add(RecordField(typeTok.lexeme, fieldTok.lexeme, mergeSpan(typeTok.span, fieldTok.span)))
                 if (match(TokenType.COMMA)) continue
                 break
@@ -779,7 +820,10 @@ class Parser(private val tokens: List<Token>) {
     private fun parseFuncDecl(): FuncDecl {
         val funcTok = expect(TokenType.FUNC, "期望 FUNC")
         val retTypeTok = expect(TokenType.IDENT, "FUNC 后需要返回类型")
+        // Check if the return type looks incomplete
+        checkDataType(retTypeTok.lexeme, retTypeTok.span)
         val nameTok = expect(TokenType.IDENT, "FUNC 需要名字")
+        // nameTok is user-defined, don't check it
         val params = parseParamList()
         val body = mutableListOf<StmtNode>()
         while (!isAtEnd() && peek().type != TokenType.ENDFUNC) {
@@ -809,7 +853,10 @@ class Parser(private val tokens: List<Token>) {
         }
         while (true) {
             val typeTok = expect(TokenType.IDENT, "参数需要类型")
+            // Check if parameter type looks incomplete
+            checkDataType(typeTok.lexeme, typeTok.span)
             val nameTok = expect(TokenType.IDENT, "参数需要名称")
+            // nameTok is user-defined, don't check it
             val span = mergeSpan(typeTok.span, nameTok.span)
             params.add(Param(typeTok.lexeme, nameTok.lexeme, false, span))
             if (match(TokenType.COMMA)) continue
@@ -979,15 +1026,43 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun parseSimpleStmt(): StmtNode {
+        val stmtStartPos = pos
         val expr = parseExpression()
         return if (match(TokenType.ASSIGN)) {
             val value = parseExpression()
             val semi = expect(TokenType.SEMICOLON, "赋值语句需要 ';' 结束")
             AssignStmt(expr, value, mergeSpan(expr.span, semi.span))
         } else {
+            // Check if this is an instruction call (e.g., WaitTime, TPWrite, SetDO)
+            // These appear as function calls or var refs at the statement level
+            when (expr) {
+                is CallExpr -> {
+                    // Check if the function name looks like an incomplete instruction
+                    checkStatementLevelIdent(expr.name, expr.span)
+                }
+                is VarRef -> {
+                    // A bare identifier at statement level - check if it should be an instruction
+                    checkStatementLevelIdent(expr.name, expr.span)
+                }
+                else -> { /* Other expressions don't need checking */ }
+            }
             val semi = expect(TokenType.SEMICOLON, "语句需要 ';' 结束")
             ExprStmt(expr, mergeSpan(expr.span, semi.span))
         }
+    }
+    
+    /**
+     * Check if an identifier at statement level looks like an incomplete or misspelled instruction/keyword.
+     * This is only called for identifiers that appear where instructions are expected (statement position),
+     * NOT for user-defined names like procedure names, variable names, etc.
+     */
+    private fun checkStatementLevelIdent(name: String, span: Span) {
+        // Only check identifiers that start with uppercase or look like instructions
+        if (name.isEmpty() || (!name[0].isUpperCase() && name.all { it.isLowerCase() || it == '_' || it.isDigit() })) {
+            return
+        }
+        
+        checkIncompleteKeyword(name, span.startLine, span.startCol)
     }
 
     // ========= 表达式 =========
