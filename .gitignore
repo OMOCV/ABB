@@ -3,8 +3,12 @@
 build/
 !gradle/wrapper/gradle-wrapper.jar
 
-# Local configuration file (sdk path, etc)
-local.properties
+# Local configuration file (sdk path, etc) - keep in VCS to support Gradle-managed SDK downloads in CI
+# Android SDK cache (only keep license files tracked)
+.android-sdk/*
+!.android-sdk/licenses/
+!.android-sdk/licenses/android-sdk-license
+!.android-sdk/licenses/android-sdk-preview-license
 
 # Log/OS Files
 *.log
