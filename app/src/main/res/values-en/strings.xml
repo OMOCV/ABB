@@ -58,6 +58,8 @@
     <string name="replace_in_routine">Replace in Routine</string>
     <string name="replace_in_module">Replace in Module</string>
     <string name="replace_in_selection">Replace in Selection</string>
+    <string name="replace_routine_scope_hint">Choose routines to replace within</string>
+    <string name="replace_module_scope_hint">Choose modules to replace within</string>
     <string name="replaced_count">Replaced %d occurrence(s)</string>
     <string name="edit_code">Edit Code</string>
     <string name="save">Save</string>
@@ -103,6 +105,10 @@
     <string name="select_modules">Select Modules</string>
     <string name="no_modules_selected">No modules selected</string>
     <string name="no_modules_found">No modules found in current file</string>
+    <string name="no_bookmark_selected_for_removal">No bookmarks selected for removal</string>
+    <string name="remove_bookmark">Remove bookmark</string>
+    <string name="remove_bookmarks">Remove bookmarks</string>
+    <string name="bookmarks_removed">Removed %d bookmarks</string>
     <string name="save_file">Save File</string>
     <string name="overwrite_file">Overwrite Original File</string>
     <string name="save_as_new_file">Save As New File</string>
@@ -110,4 +116,5 @@
     <string name="file_save_failed">Failed to save file</string>
     <string name="save_options">Save Options</string>
     <string name="save_confirmation">Do you want to overwrite the original file or save as a new file?</string>
+    <string name="permission_denied_try_save_as">Permission denied. Please try "Save As New File"</string>
 </resources>
