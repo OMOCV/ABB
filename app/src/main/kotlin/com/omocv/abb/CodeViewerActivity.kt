@@ -1,5 +1,6 @@
 package com.omocv.abb
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -18,12 +19,12 @@ import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.text.Editable
 import android.text.TextWatcher
-import android.graphics.Color
 import android.text.SpannableString
 import android.text.style.BackgroundColorSpan
 import android.text.Spannable
 import android.text.Spanned
 import android.widget.RadioGroup
+import kotlin.math.max
 
 /**
  * Full-screen code viewer with line numbers and advanced features
@@ -51,6 +52,9 @@ class CodeViewerActivity : AppCompatActivity() {
     private var isScrollSyncing = false  // Flag to prevent infinite scroll loop
     private var currentHighlightedLine: Int = -1  // Track currently highlighted line
     private var currentHighlightSpan: BackgroundColorSpan? = null  // Track current highlight span
+    private var currentHighlightRange: Pair<Int, Int>? = null
+    private var currentHighlightColor: Int? = null
+    private var currentHighlightColumns: Pair<Int, Int>? = null
     
     // File save launcher for save-as functionality
     private val saveFileLauncher = registerForActivityResult(
@@ -197,6 +201,7 @@ class CodeViewerActivity : AppCompatActivity() {
         }
     }
     
+    @SuppressLint("MissingSuperCall")
     override fun onBackPressed() {
         handleBackPressed()
     }
@@ -239,7 +244,11 @@ class CodeViewerActivity : AppCompatActivity() {
             displayContent()
             Toast.makeText(this, getString(R.string.editing_disabled), Toast.LENGTH_SHORT).show()
         }
-        
+
+        if (currentHighlightedLine != -1) {
+            reapplyCurrentHighlightIfNeeded()
+        }
+
         // Update menu
         invalidateOptionsMenu()
     }
@@ -471,7 +480,7 @@ class CodeViewerActivity : AppCompatActivity() {
     private fun showSearchDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_search, null)
         val editText = dialogView.findViewById<EditText>(R.id.etSearch)
-        
+
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.search_code))
             .setView(dialogView)
@@ -484,145 +493,137 @@ class CodeViewerActivity : AppCompatActivity() {
             .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
-    
+
+    private fun parseCurrentFileSafely(): ABBProgramFile? {
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        return try {
+            val tempFile = java.io.File(cacheDir, "_temp_parse_${System.currentTimeMillis()}.mod")
+            tempFile.writeText(content)
+            val parsedFile = abbParser.parseFile(tempFile)
+            tempFile.delete()
+            parsedFile
+        } catch (e: Exception) {
+            android.util.Log.e("CodeViewerActivity", "Error parsing content", e)
+            currentProgramFile
+        }
+    }
+
     private fun showReplaceDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_replace, null)
         val etSearchText = dialogView.findViewById<EditText>(R.id.etSearchText)
         val etReplaceText = dialogView.findViewById<EditText>(R.id.etReplaceText)
         val rgReplaceScope = dialogView.findViewById<RadioGroup>(R.id.rgReplaceScope)
-        
-        MaterialAlertDialogBuilder(this)
+        val routineGroup = dialogView.findViewById<View>(R.id.groupRoutineSelection)
+        val moduleGroup = dialogView.findViewById<View>(R.id.groupModuleSelection)
+        val routineEmpty = dialogView.findViewById<TextView>(R.id.tvRoutineEmpty)
+        val moduleEmpty = dialogView.findViewById<TextView>(R.id.tvModuleEmpty)
+        val rvRoutineCandidates = dialogView.findViewById<RecyclerView>(R.id.rvRoutineCandidates)
+        val rvModuleCandidates = dialogView.findViewById<RecyclerView>(R.id.rvModuleCandidates)
+        val btnRoutineSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRoutineSelectAll)
+        val btnRoutineDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRoutineDeselectAll)
+        val btnModuleSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnModuleSelectAll)
+        val btnModuleDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnModuleDeselectAll)
+
+        val parsedFile = parseCurrentFileSafely()
+        val routines = parsedFile?.routines ?: emptyList()
+        val modules = parsedFile?.modules ?: emptyList()
+
+        var routineAdapter: RoutineSelectionAdapter? = null
+        var moduleAdapter: ModuleSelectionAdapter? = null
+
+        rvRoutineCandidates.layoutManager = LinearLayoutManager(this)
+        rvModuleCandidates.layoutManager = LinearLayoutManager(this)
+
+        if (routines.isNotEmpty()) {
+            routineAdapter = RoutineSelectionAdapter(routines)
+            rvRoutineCandidates.adapter = routineAdapter
+            rvRoutineCandidates.visibility = View.VISIBLE
+            routineEmpty.visibility = View.GONE
+        } else {
+            rvRoutineCandidates.visibility = View.GONE
+            routineEmpty.visibility = View.VISIBLE
+        }
+
+        if (modules.isNotEmpty()) {
+            moduleAdapter = ModuleSelectionAdapter(modules)
+            rvModuleCandidates.adapter = moduleAdapter
+            rvModuleCandidates.visibility = View.VISIBLE
+            moduleEmpty.visibility = View.GONE
+        } else {
+            rvModuleCandidates.visibility = View.GONE
+            moduleEmpty.visibility = View.VISIBLE
+        }
+
+        btnRoutineSelectAll.setOnClickListener { routineAdapter?.selectAll() }
+        btnRoutineDeselectAll.setOnClickListener { routineAdapter?.deselectAll() }
+        btnModuleSelectAll.setOnClickListener { moduleAdapter?.selectAll() }
+        btnModuleDeselectAll.setOnClickListener { moduleAdapter?.deselectAll() }
+
+        val updateScopeVisibility = {
+            when (rgReplaceScope.checkedRadioButtonId) {
+                R.id.rbReplaceInRoutine -> {
+                    routineGroup.visibility = View.VISIBLE
+                    moduleGroup.visibility = View.GONE
+                }
+                R.id.rbReplaceInModule -> {
+                    routineGroup.visibility = View.GONE
+                    moduleGroup.visibility = View.VISIBLE
+                }
+                else -> {
+                    routineGroup.visibility = View.GONE
+                    moduleGroup.visibility = View.GONE
+                }
+            }
+        }
+
+        rgReplaceScope.setOnCheckedChangeListener { _, _ -> updateScopeVisibility.invoke() }
+        updateScopeVisibility.invoke()
+
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.replace_code))
             .setView(dialogView)
-            .setPositiveButton(getString(R.string.replace)) { _, _ ->
+            .setPositiveButton(getString(R.string.replace), null)
+            .setNegativeButton(getString(R.string.cancel), null)
+            .create()
+
+        dialog.setOnShowListener {
+            val positiveButton = dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)
+            positiveButton.setOnClickListener {
                 val searchText = etSearchText.text.toString()
                 val replaceText = etReplaceText.text.toString()
-                
-                if (searchText.isNotEmpty()) {
-                    val scope = when (rgReplaceScope.checkedRadioButtonId) {
-                        R.id.rbReplaceInRoutine -> {
-                            // Show routine selection dialog
-                            showRoutineSelectionDialog(searchText, replaceText)
-                            return@setPositiveButton
+
+                if (searchText.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.search_hint), Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                when (rgReplaceScope.checkedRadioButtonId) {
+                    R.id.rbReplaceInRoutine -> {
+                        val selectedRoutines = routineAdapter?.getSelectedRoutines().orEmpty()
+                        if (selectedRoutines.isEmpty()) {
+                            Toast.makeText(this, getString(R.string.no_routines_selected), Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
                         }
-                        R.id.rbReplaceInModule -> {
-                            // Show module selection dialog
-                            showModuleSelectionDialog(searchText, replaceText)
-                            return@setPositiveButton
-                        }
-                        else -> "all"
+                        replaceCode(searchText, replaceText, "routine", selectedRoutines, null)
                     }
-                    replaceCode(searchText, replaceText, scope, null, null)
+                    R.id.rbReplaceInModule -> {
+                        val selectedModules = moduleAdapter?.getSelectedModules().orEmpty()
+                        if (selectedModules.isEmpty()) {
+                            Toast.makeText(this, getString(R.string.no_modules_selected), Toast.LENGTH_SHORT).show()
+                            return@setOnClickListener
+                        }
+                        replaceCode(searchText, replaceText, "module", null, selectedModules)
+                    }
+                    else -> replaceCode(searchText, replaceText, "all", null, null)
                 }
+
+                dialog.dismiss()
             }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
+        }
+
+        dialog.show()
     }
-    
-    private fun showRoutineSelectionDialog(searchText: String, replaceText: String) {
-        // Re-parse the current content to get the most up-to-date routines
-        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val routines = try {
-            val tempFile = java.io.File(cacheDir, "_temp_parse_${System.currentTimeMillis()}.mod")
-            tempFile.writeText(content)
-            val parsedFile = abbParser.parseFile(tempFile)
-            tempFile.delete()
-            parsedFile.routines
-        } catch (e: Exception) {
-            android.util.Log.e("CodeViewerActivity", "Error parsing routines", e)
-            currentProgramFile?.routines ?: emptyList()
-        }
-        
-        if (routines.isEmpty()) {
-            Toast.makeText(this, getString(R.string.no_routines_found), Toast.LENGTH_SHORT).show()
-            replaceCode(searchText, replaceText, "all", null, null)
-            return
-        }
-        
-        val dialogView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
-        val rvRoutines = dialogView.findViewById<RecyclerView>(R.id.rvRoutines)
-        val btnSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
-        val btnDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
-        
-        rvRoutines.layoutManager = LinearLayoutManager(this)
-        val adapter = RoutineSelectionAdapter(routines)
-        rvRoutines.adapter = adapter
-        
-        btnSelectAll.setOnClickListener {
-            adapter.selectAll()
-        }
-        
-        btnDeselectAll.setOnClickListener {
-            adapter.deselectAll()
-        }
-        
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.select_routines))
-            .setView(dialogView)
-            .setPositiveButton(getString(R.string.replace)) { _, _ ->
-                val selectedRoutines = adapter.getSelectedRoutines()
-                if (selectedRoutines.isEmpty()) {
-                    Toast.makeText(this, getString(R.string.no_routines_selected), Toast.LENGTH_SHORT).show()
-                } else {
-                    replaceCode(searchText, replaceText, "routine", selectedRoutines, null)
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-    
-    private fun showModuleSelectionDialog(searchText: String, replaceText: String) {
-        // Re-parse the current content to get the most up-to-date modules
-        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val modules = try {
-            val tempFile = java.io.File(cacheDir, "_temp_parse_${System.currentTimeMillis()}.mod")
-            tempFile.writeText(content)
-            val parsedFile = abbParser.parseFile(tempFile)
-            tempFile.delete()
-            parsedFile.modules
-        } catch (e: Exception) {
-            android.util.Log.e("CodeViewerActivity", "Error parsing modules", e)
-            currentProgramFile?.modules ?: emptyList()
-        }
-        
-        if (modules.isEmpty()) {
-            Toast.makeText(this, getString(R.string.no_modules_found), Toast.LENGTH_SHORT).show()
-            replaceCode(searchText, replaceText, "all", null, null)
-            return
-        }
-        
-        val dialogView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
-        val rvRoutines = dialogView.findViewById<RecyclerView>(R.id.rvRoutines)
-        val btnSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
-        val btnDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
-        
-        rvRoutines.layoutManager = LinearLayoutManager(this)
-        val adapter = ModuleSelectionAdapter(modules)
-        rvRoutines.adapter = adapter
-        
-        btnSelectAll.setOnClickListener {
-            adapter.selectAll()
-        }
-        
-        btnDeselectAll.setOnClickListener {
-            adapter.deselectAll()
-        }
-        
-        MaterialAlertDialogBuilder(this)
-            .setTitle(getString(R.string.select_modules))
-            .setView(dialogView)
-            .setPositiveButton(getString(R.string.replace)) { _, _ ->
-                val selectedModules = adapter.getSelectedModules()
-                if (selectedModules.isEmpty()) {
-                    Toast.makeText(this, getString(R.string.no_modules_selected), Toast.LENGTH_SHORT).show()
-                } else {
-                    replaceCode(searchText, replaceText, "module", null, selectedModules)
-                }
-            }
-            .setNegativeButton(getString(R.string.cancel), null)
-            .show()
-    }
-    
+
     private fun replaceCode(searchText: String, replaceText: String, scope: String, selectedRoutines: List<ABBRoutine>?, selectedModules: List<ABBModule>?) {
         var content = if (isEditMode) etCodeContent.text.toString() else fileContent
         var count = 0
@@ -686,7 +687,11 @@ class CodeViewerActivity : AppCompatActivity() {
         } else {
             displayContent()
         }
-        
+
+        if (currentHighlightedLine != -1) {
+            reapplyCurrentHighlightIfNeeded()
+        }
+
         Toast.makeText(this, getString(R.string.replaced_count, count), Toast.LENGTH_SHORT).show()
     }
 
@@ -859,142 +864,137 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun highlightLine(lineNumber: Int) {
-        // Highlight the target line persistently by adding a background color
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val lines = content.lines()
-        
-        if (lineNumber > 0 && lineNumber <= lines.size) {
-            // Store the currently highlighted line
+
+        calculateHighlightRange(content, lineNumber, null)?.let { (startPos, endPos) ->
             currentHighlightedLine = lineNumber
-            
-            // Calculate character positions for the line
-            var startPos = 0
-            for (i in 0 until lineNumber - 1) {
-                startPos += lines[i].length + 1
-            }
-            val endPos = startPos + lines[lineNumber - 1].length
-            
-            // Use centralized highlight color management
+            currentHighlightColumns = null
+
             val highlightColor = HighlightColors.getLineHighlightColor(this)
-            
-            if (isEditMode) {
-                // Apply highlighting in edit mode
-                val editableContent = etCodeContent.text
-                if (editableContent is Spannable) {
-                    // Remove previous highlight span if it exists
-                    if (currentHighlightSpan != null) {
-                        editableContent.removeSpan(currentHighlightSpan)
-                    }
-                    
-                    // Create and apply new highlight span
-                    currentHighlightSpan = BackgroundColorSpan(highlightColor)
-                    editableContent.setSpan(
-                        currentHighlightSpan,
-                        startPos,
-                        endPos.coerceAtMost(editableContent.length),
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
-                }
-            } else {
-                // Apply syntax highlighting first in view mode
-                val highlighted = syntaxHighlighter.highlight(content)
-                // Then add the background span to the highlighted text
-                val finalSpannable = SpannableString(highlighted)
-                finalSpannable.setSpan(
-                    BackgroundColorSpan(highlightColor),
-                    startPos.coerceAtMost(finalSpannable.length),
-                    endPos.coerceAtMost(finalSpannable.length),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-                tvCodeContent.text = finalSpannable
-                
-                // Set up click listener to clear highlight when user clicks on the code
-                tvCodeContent.setOnClickListener {
-                    clearHighlight()
-                }
-            }
+            applyHighlightSpan(content, startPos, endPos, highlightColor)
         }
     }
-    
+
     private fun clearHighlight() {
         if (currentHighlightedLine != -1) {
-            currentHighlightedLine = -1
-            
-            // Clear highlight span in edit mode
-            if (isEditMode && currentHighlightSpan != null) {
-                val content = etCodeContent.text
-                if (content is Spannable) {
-                    content.removeSpan(currentHighlightSpan)
+            val range = currentHighlightRange
+            val color = currentHighlightColor
+
+            if (isEditMode && range != null && color != null) {
+                val editableContent = etCodeContent.text
+                if (editableContent is Spannable) {
+                    removeExistingHighlightSpans(editableContent)
                 }
-                currentHighlightSpan = null
             }
-            
-            // Clear in view mode
+
             if (!isEditMode) {
                 tvCodeContent.setOnClickListener(null)
                 displayContent()
             }
+
+            currentHighlightedLine = -1
+            currentHighlightSpan = null
+            currentHighlightRange = null
+            currentHighlightColor = null
+            currentHighlightColumns = null
         }
     }
-    
+
     private fun highlightLineAndColumn(lineNumber: Int, columnStart: Int, columnEnd: Int) {
-        // Highlight the entire line (not just the error range) with a distinct error color
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val lines = content.lines()
-        
-        if (lineNumber > 0 && lineNumber <= lines.size) {
-            // Store the currently highlighted line
+
+        calculateHighlightRange(content, lineNumber, columnStart to columnEnd)?.let { (startPos, endPos) ->
             currentHighlightedLine = lineNumber
-            
-            // Calculate character positions for the entire line
-            var lineStartPos = 0
-            for (i in 0 until lineNumber - 1) {
-                lineStartPos += lines[i].length + 1
-            }
-            
-            // Highlight the ENTIRE line, not just the error column range
-            val lineEndPos = lineStartPos + lines[lineNumber - 1].length
-            
-            // Use centralized error highlight color management
+            currentHighlightColumns = columnStart to columnEnd
+
             val highlightColor = HighlightColors.getErrorHighlightColor(this)
-            
-            if (isEditMode) {
-                // Apply highlighting in edit mode to the entire line
-                val editableContent = etCodeContent.text
-                if (editableContent is Spannable) {
-                    // Remove previous highlight span if it exists
-                    if (currentHighlightSpan != null) {
-                        editableContent.removeSpan(currentHighlightSpan)
-                    }
-                    
-                    // Create and apply new highlight span for the entire line
-                    currentHighlightSpan = BackgroundColorSpan(highlightColor)
-                    editableContent.setSpan(
-                        currentHighlightSpan,
-                        lineStartPos,
-                        lineEndPos.coerceAtMost(editableContent.length),
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                    )
-                }
-            } else {
-                // Apply syntax highlighting first in view mode
-                val highlighted = syntaxHighlighter.highlight(content)
-                // Then add the background span to the entire line
-                val finalSpannable = SpannableString(highlighted)
-                finalSpannable.setSpan(
-                    BackgroundColorSpan(highlightColor),
-                    lineStartPos.coerceAtMost(finalSpannable.length),
-                    lineEndPos.coerceAtMost(finalSpannable.length),
+            applyHighlightSpan(content, startPos, endPos, highlightColor)
+        }
+    }
+
+    private fun applyHighlightSpan(content: String, startPos: Int, endPos: Int, highlightColor: Int) {
+        currentHighlightRange = startPos to endPos
+        currentHighlightColor = highlightColor
+
+        if (isEditMode) {
+            val editableContent = etCodeContent.text
+            if (editableContent is Spannable) {
+                removeExistingHighlightSpans(editableContent)
+
+                val highlightSpan = BackgroundColorSpan(highlightColor)
+                currentHighlightSpan = highlightSpan
+                editableContent.setSpan(
+                    highlightSpan,
+                    startPos.coerceAtMost(editableContent.length),
+                    endPos.coerceAtMost(editableContent.length),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
-                tvCodeContent.text = finalSpannable
-                
-                // Set up click listener to clear highlight when user clicks on the code
-                tvCodeContent.setOnClickListener {
-                    clearHighlight()
-                }
+            }
+        } else {
+            val highlighted = syntaxHighlighter.highlight(content)
+            val finalSpannable = SpannableString(highlighted)
+            finalSpannable.setSpan(
+                BackgroundColorSpan(highlightColor),
+                startPos.coerceAtMost(finalSpannable.length),
+                endPos.coerceAtMost(finalSpannable.length),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            )
+            tvCodeContent.text = finalSpannable
+
+            tvCodeContent.setOnClickListener {
+                clearHighlight()
             }
         }
+    }
+
+    private fun removeExistingHighlightSpans(editableContent: Spannable) {
+        currentHighlightSpan?.let { editableContent.removeSpan(it) }
+
+        val range = currentHighlightRange
+        val color = currentHighlightColor
+        if (range != null && color != null) {
+            val (start, end) = range
+            editableContent.getSpans(start, end.coerceAtMost(editableContent.length), BackgroundColorSpan::class.java)
+                .filter { span -> span.backgroundColor == color }
+                .forEach { span -> editableContent.removeSpan(span) }
+        }
+    }
+
+    private fun reapplyCurrentHighlightIfNeeded() {
+        val range = currentHighlightRange
+        val color = currentHighlightColor
+        val lineNumber = currentHighlightedLine
+
+        if (range != null && color != null && lineNumber != -1) {
+            val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+            val recalculatedRange = calculateHighlightRange(content, lineNumber, currentHighlightColumns)
+            val (start, end) = recalculatedRange ?: range
+            applyHighlightSpan(content, start, end, color)
+        }
+    }
+
+    private fun calculateHighlightRange(
+        content: String,
+        lineNumber: Int,
+        columnRange: Pair<Int, Int>?
+    ): Pair<Int, Int>? {
+        val lines = content.lines()
+        if (lineNumber <= 0 || lineNumber > lines.size) return null
+
+        var startPos = 0
+        for (i in 0 until lineNumber - 1) {
+            startPos += lines[i].length + 1
+        }
+
+        val lineText = lines[lineNumber - 1]
+        val lineEndPos = startPos + lineText.length
+
+        return columnRange?.let { (columnStart, columnEnd) ->
+            val resolvedStart = (startPos + columnStart).coerceIn(startPos, lineEndPos)
+            val minimumSpanEnd = if (lineText.isNotEmpty()) resolvedStart + 1 else resolvedStart
+            val resolvedEnd = (startPos + max(columnEnd, columnStart)).coerceIn(minimumSpanEnd, lineEndPos)
+            resolvedStart to resolvedEnd
+        } ?: (startPos to lineEndPos)
     }
 
     private fun exportCode() {
@@ -1037,16 +1037,58 @@ class CodeViewerActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.no_bookmarks), Toast.LENGTH_SHORT).show()
             return
         }
-        
-        val items = bookmarks.sorted().map { getString(R.string.line_number, it) }.toTypedArray()
-        
+
+        val sortedBookmarks = bookmarks.mapNotNull { it.toIntOrNull() }.sorted()
+        val items = sortedBookmarks.map { getString(R.string.line_number, it.toString()) }.toTypedArray()
+
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.bookmarks))
             .setItems(items) { _, which ->
-                val lineNumber = bookmarks.sorted()[which].toInt()
+                val lineNumber = sortedBookmarks[which]
                 jumpToLine(lineNumber)
             }
+            .setNeutralButton(getString(R.string.remove_bookmarks)) { dialog, _ ->
+                dialog.dismiss()
+                showBookmarkRemovalDialog(bookmarks)
+            }
             .setNegativeButton(getString(R.string.close), null)
+            .show()
+    }
+
+    private fun showBookmarkRemovalDialog(bookmarks: Set<String>) {
+        val sortedBookmarks = bookmarks.mapNotNull { it.toIntOrNull() }.sorted()
+        if (sortedBookmarks.isEmpty()) {
+            Toast.makeText(this, getString(R.string.no_bookmarks), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val items = sortedBookmarks.map { getString(R.string.line_number, it.toString()) }.toTypedArray()
+        val checkedItems = BooleanArray(items.size)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.remove_bookmark))
+            .setMultiChoiceItems(items, checkedItems) { _, which, isChecked ->
+                checkedItems[which] = isChecked
+            }
+            .setPositiveButton(getString(R.string.remove_bookmarks)) { _, _ ->
+                val toRemove = sortedBookmarks
+                    .filterIndexed { index, _ -> checkedItems[index] }
+                    .map { it.toString() }
+                    .toSet()
+
+                if (toRemove.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.no_bookmark_selected_for_removal), Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                val updated = bookmarks.toMutableSet()
+                updated.removeAll(toRemove)
+                prefs.edit().putStringSet(KEY_BOOKMARKS + fileName, updated).apply()
+
+                Toast.makeText(this, getString(R.string.bookmarks_removed, toRemove.size), Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(getString(R.string.cancel), null)
             .show()
     }
 

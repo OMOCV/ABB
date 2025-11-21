@@ -58,6 +58,8 @@
     <string name="replace_in_routine">在例行程序中替换</string>
     <string name="replace_in_module">在模块中替换</string>
     <string name="replace_in_selection">在选定范围替换</string>
+    <string name="replace_routine_scope_hint">选择要替换的例行程序</string>
+    <string name="replace_module_scope_hint">选择要替换的模块</string>
     <string name="replaced_count">已替换 %d 处</string>
     <string name="edit_code">编辑代码</string>
     <string name="save">保存</string>
@@ -103,6 +105,10 @@
     <string name="select_modules">选择模块</string>
     <string name="no_modules_selected">未选择任何模块</string>
     <string name="no_modules_found">当前文件中未找到模块</string>
+    <string name="no_bookmark_selected_for_removal">未选择任何要移除的书签</string>
+    <string name="remove_bookmark">移除书签</string>
+    <string name="remove_bookmarks">移除书签</string>
+    <string name="bookmarks_removed">已移除 %d 个书签</string>
     <string name="save_file">保存文件</string>
     <string name="overwrite_file">覆盖原文件</string>
     <string name="save_as_new_file">另存为新文件</string>
