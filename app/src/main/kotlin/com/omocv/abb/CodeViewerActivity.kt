@@ -11,6 +11,7 @@ import android.widget.TextView
 import android.widget.EditText
 import android.widget.Toast
 import android.view.View
+import android.graphics.drawable.ColorDrawable
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -583,6 +584,7 @@ class CodeViewerActivity : AppCompatActivity() {
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
             )
+            selectionDialog.window?.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
         }
 
         fun showModuleSelectionDialog() {
@@ -613,6 +615,7 @@ class CodeViewerActivity : AppCompatActivity() {
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
             )
+            selectionDialog.window?.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
         }
 
         btnOpenRoutineSelector.setOnClickListener {
@@ -950,7 +953,7 @@ class CodeViewerActivity : AppCompatActivity() {
             currentHighlightColumns = null
 
             val highlightColor = HighlightColors.getLineHighlightColor(this)
-            applyHighlightSpan(content, startPos, endPos, highlightColor)
+            applyHighlightSpan(content, startPos, endPos, highlightColor, applyAfterLayout = true)
         }
     }
 
@@ -987,29 +990,43 @@ class CodeViewerActivity : AppCompatActivity() {
             currentHighlightColumns = columnStart to columnEnd
 
             val highlightColor = HighlightColors.getErrorHighlightColor(this)
-            applyHighlightSpan(content, startPos, endPos, highlightColor)
+            applyHighlightSpan(content, startPos, endPos, highlightColor, applyAfterLayout = true)
         }
     }
 
-    private fun applyHighlightSpan(content: String, startPos: Int, endPos: Int, highlightColor: Int) {
+    private fun applyHighlightSpan(
+        content: String,
+        startPos: Int,
+        endPos: Int,
+        highlightColor: Int,
+        applyAfterLayout: Boolean = false
+    ) {
         currentHighlightRange = startPos to endPos
         currentHighlightColor = highlightColor
 
         if (isEditMode) {
-            val editableContent = etCodeContent.text
-            if (editableContent is Spannable) {
-                removeExistingHighlightSpans(editableContent)
+            val applyToEditable = {
+                val editableContent = etCodeContent.text
+                if (editableContent is Spannable) {
+                    removeExistingHighlightSpans(editableContent)
 
-                val highlightSpan = BackgroundColorSpan(highlightColor)
-                currentHighlightSpan = highlightSpan
-                editableContent.setSpan(
-                    highlightSpan,
-                    startPos.coerceAtMost(editableContent.length),
-                    endPos.coerceAtMost(editableContent.length),
-                    Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
+                    val highlightSpan = BackgroundColorSpan(highlightColor)
+                    currentHighlightSpan = highlightSpan
+                    editableContent.setSpan(
+                        highlightSpan,
+                        startPos.coerceAtMost(editableContent.length),
+                        endPos.coerceAtMost(editableContent.length),
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
 
-                etCodeContent.invalidate()
+                    etCodeContent.invalidate()
+                }
+            }
+
+            if (applyAfterLayout) {
+                etCodeContent.post { applyToEditable() }
+            } else {
+                applyToEditable()
             }
         } else {
             val highlighted = syntaxHighlighter.highlight(content)
