@@ -359,11 +359,31 @@ class ABBParser {
             }
         }
         
+        val lines = content.lines()
+
+        val filteredErrors = allErrors.filterNot { error ->
+            val line = lines.getOrNull(error.lineNumber - 1) ?: return@filterNot false
+            shouldIgnoreBalancedBracketError(line, error)
+        }
+
         // Sort by line number, then column
-        return allErrors.sortedWith(
+        return filteredErrors.sortedWith(
             compareBy<SyntaxError> { it.lineNumber }
                 .thenBy { it.columnStart }
         )
+    }
+
+    private fun shouldIgnoreBalancedBracketError(line: String, error: SyntaxError): Boolean {
+        val openIndex = line.indexOf('[')
+        val closeIndex = line.lastIndexOf(']')
+
+        if (openIndex == -1 || closeIndex == -1 || closeIndex < openIndex) return false
+
+        val bracketBalanced = line.count { it == '[' } == line.count { it == ']' }
+        val spanInsideBracket = error.columnStart in openIndex..closeIndex
+        val looksLikeArrayLiteral = line.contains(":=") && Regex("\\[[^\\]]*\\]").containsMatchIn(line)
+
+        return bracketBalanced && spanInsideBracket && looksLikeArrayLiteral
     }
 
     /**

@@ -515,14 +515,10 @@ class CodeViewerActivity : AppCompatActivity() {
         val rgReplaceScope = dialogView.findViewById<RadioGroup>(R.id.rgReplaceScope)
         val routineGroup = dialogView.findViewById<View>(R.id.groupRoutineSelection)
         val moduleGroup = dialogView.findViewById<View>(R.id.groupModuleSelection)
-        val routineEmpty = dialogView.findViewById<TextView>(R.id.tvRoutineEmpty)
-        val moduleEmpty = dialogView.findViewById<TextView>(R.id.tvModuleEmpty)
-        val rvRoutineCandidates = dialogView.findViewById<RecyclerView>(R.id.rvRoutineCandidates)
-        val rvModuleCandidates = dialogView.findViewById<RecyclerView>(R.id.rvModuleCandidates)
-        val btnRoutineSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRoutineSelectAll)
-        val btnRoutineDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnRoutineDeselectAll)
-        val btnModuleSelectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnModuleSelectAll)
-        val btnModuleDeselectAll = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnModuleDeselectAll)
+        val btnOpenRoutineSelector = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnOpenRoutineSelector)
+        val btnOpenModuleSelector = dialogView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnOpenModuleSelector)
+        val tvRoutineStatus = dialogView.findViewById<TextView>(R.id.tvRoutineStatus)
+        val tvModuleStatus = dialogView.findViewById<TextView>(R.id.tvModuleStatus)
 
         val parsedFile = parseCurrentFileSafely()
         val routines = parsedFile?.routines ?: emptyList()
@@ -531,33 +527,112 @@ class CodeViewerActivity : AppCompatActivity() {
         var routineAdapter: RoutineSelectionAdapter? = null
         var moduleAdapter: ModuleSelectionAdapter? = null
 
-        rvRoutineCandidates.layoutManager = LinearLayoutManager(this)
-        rvModuleCandidates.layoutManager = LinearLayoutManager(this)
-
         if (routines.isNotEmpty()) {
             routineAdapter = RoutineSelectionAdapter(routines)
-            rvRoutineCandidates.adapter = routineAdapter
-            rvRoutineCandidates.visibility = View.VISIBLE
-            routineEmpty.visibility = View.GONE
         } else {
-            rvRoutineCandidates.visibility = View.GONE
-            routineEmpty.visibility = View.VISIBLE
+            tvRoutineStatus.text = getString(R.string.no_routines_found)
         }
 
         if (modules.isNotEmpty()) {
             moduleAdapter = ModuleSelectionAdapter(modules)
-            rvModuleCandidates.adapter = moduleAdapter
-            rvModuleCandidates.visibility = View.VISIBLE
-            moduleEmpty.visibility = View.GONE
         } else {
-            rvModuleCandidates.visibility = View.GONE
-            moduleEmpty.visibility = View.VISIBLE
+            tvModuleStatus.text = getString(R.string.no_modules_found)
         }
 
-        btnRoutineSelectAll.setOnClickListener { routineAdapter?.selectAll() }
-        btnRoutineDeselectAll.setOnClickListener { routineAdapter?.deselectAll() }
-        btnModuleSelectAll.setOnClickListener { moduleAdapter?.selectAll() }
-        btnModuleDeselectAll.setOnClickListener { moduleAdapter?.deselectAll() }
+        fun updateRoutineStatus() {
+            tvRoutineStatus.text = when {
+                routineAdapter == null -> getString(R.string.no_routines_found)
+                routineAdapter.itemCount == 0 -> getString(R.string.no_routines_found)
+                else -> getString(R.string.routines_selected, routineAdapter.getSelectedRoutines().size)
+            }
+        }
+
+        fun updateModuleStatus() {
+            tvModuleStatus.text = when {
+                moduleAdapter == null -> getString(R.string.no_modules_found)
+                moduleAdapter.itemCount == 0 -> getString(R.string.no_modules_found)
+                else -> getString(R.string.modules_selected, moduleAdapter.getSelectedModules().size)
+            }
+        }
+
+        fun showRoutineSelectionDialog() {
+            val adapter = routineAdapter ?: return
+            if (adapter.itemCount == 0) return
+
+            val selectionView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
+            val tvTitle = selectionView.findViewById<TextView>(R.id.tvRoutineSelectionTitle)
+            val rvList = selectionView.findViewById<RecyclerView>(R.id.rvRoutines)
+            val btnSelectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
+            val btnDeselectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
+
+            tvTitle.text = getString(R.string.select_routines)
+            rvList.layoutManager = LinearLayoutManager(this)
+            rvList.adapter = adapter
+
+            btnSelectAll.setOnClickListener { adapter.selectAll(); updateRoutineStatus() }
+            btnDeselectAll.setOnClickListener { adapter.deselectAll(); updateRoutineStatus() }
+
+            val selectionDialog = MaterialAlertDialogBuilder(this)
+                .setView(selectionView)
+                .setPositiveButton(getString(R.string.ok), null)
+                .create()
+
+            selectionDialog.setOnDismissListener { updateRoutineStatus() }
+            selectionDialog.show()
+            selectionDialog.window?.setLayout(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        fun showModuleSelectionDialog() {
+            val adapter = moduleAdapter ?: return
+            if (adapter.itemCount == 0) return
+
+            val selectionView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
+            val tvTitle = selectionView.findViewById<TextView>(R.id.tvRoutineSelectionTitle)
+            val rvList = selectionView.findViewById<RecyclerView>(R.id.rvRoutines)
+            val btnSelectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
+            val btnDeselectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
+
+            tvTitle.text = getString(R.string.select_modules)
+            rvList.layoutManager = LinearLayoutManager(this)
+            rvList.adapter = adapter
+
+            btnSelectAll.setOnClickListener { adapter.selectAll(); updateModuleStatus() }
+            btnDeselectAll.setOnClickListener { adapter.deselectAll(); updateModuleStatus() }
+
+            val selectionDialog = MaterialAlertDialogBuilder(this)
+                .setView(selectionView)
+                .setPositiveButton(getString(R.string.ok), null)
+                .create()
+
+            selectionDialog.setOnDismissListener { updateModuleStatus() }
+            selectionDialog.show()
+            selectionDialog.window?.setLayout(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+        }
+
+        btnOpenRoutineSelector.setOnClickListener {
+            if (routineAdapter == null || routineAdapter.itemCount == 0) {
+                Toast.makeText(this, getString(R.string.no_routines_found), Toast.LENGTH_SHORT).show()
+            } else {
+                showRoutineSelectionDialog()
+            }
+        }
+
+        btnOpenModuleSelector.setOnClickListener {
+            if (moduleAdapter == null || moduleAdapter.itemCount == 0) {
+                Toast.makeText(this, getString(R.string.no_modules_found), Toast.LENGTH_SHORT).show()
+            } else {
+                showModuleSelectionDialog()
+            }
+        }
+
+        updateRoutineStatus()
+        updateModuleStatus()
 
         val updateScopeVisibility = {
             when (rgReplaceScope.checkedRadioButtonId) {
@@ -803,8 +878,10 @@ class CodeViewerActivity : AppCompatActivity() {
                     }
                 }
             }
-            
+
             Toast.makeText(this, getString(R.string.jumped_to_line, lineNumber), Toast.LENGTH_SHORT).show()
+
+            reapplyCurrentHighlightIfNeeded()
         }
     }
     
@@ -860,6 +937,8 @@ class CodeViewerActivity : AppCompatActivity() {
                 getString(R.string.jumped_to_line, lineNumber)
             }
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+
+            reapplyCurrentHighlightIfNeeded()
         }
     }
     
@@ -929,6 +1008,8 @@ class CodeViewerActivity : AppCompatActivity() {
                     endPos.coerceAtMost(editableContent.length),
                     Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                 )
+
+                etCodeContent.invalidate()
             }
         } else {
             val highlighted = syntaxHighlighter.highlight(content)

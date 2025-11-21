@@ -75,42 +75,18 @@
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/tvRoutineEmpty"
+            android:id="@+id/tvRoutineStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingVertical="4dp"
-            android:text="@string/no_routines_found"
-            android:visibility="gone" />
+            android:text="@string/no_routines_found" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvRoutineCandidates"
-            android:layout_width="match_parent"
-            android:layout_height="180dp"
-            android:scrollbars="vertical"
-            android:visibility="gone" />
-
-        <LinearLayout
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOpenRoutineSelector"
+            style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="end"
-            android:orientation="horizontal"
-            android:paddingTop="4dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnRoutineSelectAll"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/select_all" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnRoutineDeselectAll"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/deselect_all" />
-
-        </LinearLayout>
+            android:text="@string/select_routines" />
 
     </LinearLayout>
 
@@ -130,42 +106,18 @@
             android:textStyle="bold" />
 
         <TextView
-            android:id="@+id/tvModuleEmpty"
+            android:id="@+id/tvModuleStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingVertical="4dp"
-            android:text="@string/no_modules_found"
-            android:visibility="gone" />
+            android:text="@string/no_modules_found" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvModuleCandidates"
-            android:layout_width="match_parent"
-            android:layout_height="180dp"
-            android:scrollbars="vertical"
-            android:visibility="gone" />
-
-        <LinearLayout
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnOpenModuleSelector"
+            style="@style/Widget.Material3.Button.OutlinedButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="end"
-            android:orientation="horizontal"
-            android:paddingTop="4dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnModuleSelectAll"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/select_all" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnModuleDeselectAll"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/deselect_all" />
-
-        </LinearLayout>
+            android:text="@string/select_modules" />
 
     </LinearLayout>
 

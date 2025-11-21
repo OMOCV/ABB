@@ -105,6 +105,7 @@
     <string name="select_modules">选择模块</string>
     <string name="no_modules_selected">未选择任何模块</string>
     <string name="no_modules_found">当前文件中未找到模块</string>
+    <string name="modules_selected">已选择 %d 个模块</string>
     <string name="no_bookmark_selected_for_removal">未选择任何要移除的书签</string>
     <string name="remove_bookmark">移除书签</string>
     <string name="remove_bookmarks">移除书签</string>
