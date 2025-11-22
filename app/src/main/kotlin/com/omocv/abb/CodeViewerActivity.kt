@@ -629,7 +629,7 @@ class CodeViewerActivity : AppCompatActivity() {
             )
         }
 
-        btnOpenRoutineSelector.setOnClickListener {
+        val openRoutineSelector: () -> Unit = {
             if (routineAdapter == null || routineAdapter.itemCount == 0) {
                 Toast.makeText(this, getString(R.string.no_routines_found), Toast.LENGTH_SHORT).show()
             } else {
@@ -637,13 +637,20 @@ class CodeViewerActivity : AppCompatActivity() {
             }
         }
 
-        btnOpenModuleSelector.setOnClickListener {
+        val openModuleSelector: () -> Unit = {
             if (moduleAdapter == null || moduleAdapter.itemCount == 0) {
                 Toast.makeText(this, getString(R.string.no_modules_found), Toast.LENGTH_SHORT).show()
             } else {
                 showModuleSelectionDialog()
             }
         }
+
+        btnOpenRoutineSelector.setOnClickListener { openRoutineSelector() }
+        btnOpenModuleSelector.setOnClickListener { openModuleSelector() }
+        tvRoutineStatus.setOnClickListener { openRoutineSelector() }
+        tvModuleStatus.setOnClickListener { openModuleSelector() }
+        routineGroup.setOnClickListener { openRoutineSelector() }
+        moduleGroup.setOnClickListener { openModuleSelector() }
 
         updateRoutineStatus()
         updateModuleStatus()

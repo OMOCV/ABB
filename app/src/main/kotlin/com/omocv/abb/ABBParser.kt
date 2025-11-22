@@ -208,6 +208,20 @@ class ABBParser {
             }
         }
 
+        if (currentModule != null) {
+            // Gracefully close the last module if the file ended without ENDMODULE
+            modules.add(
+                ABBModule(
+                    name = currentModule,
+                    type = moduleType,
+                    routines = moduleRoutines.toList(),
+                    variables = moduleVariables.toList(),
+                    startLine = moduleStartLine,
+                    endLine = lines.size
+                )
+            )
+        }
+
         return modules
     }
 
@@ -299,6 +313,20 @@ class ABBParser {
                     }
                 }
             }
+        }
+
+        if (currentRoutine != null) {
+            // Close any unterminated routine at EOF so it still appears in selectors
+            routines.add(
+                ABBRoutine(
+                    name = currentRoutine,
+                    type = routineType,
+                    parameters = parameters.toList(),
+                    localVariables = localVars.toList(),
+                    startLine = startLine,
+                    endLine = lines.size
+                )
+            )
         }
 
         return routines
