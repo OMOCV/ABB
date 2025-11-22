@@ -134,11 +134,18 @@ class ABBParser {
         val modules = parseModules(content)
         val routines = parseRoutines(content)
 
+        val modulesWithRoutines = modules.map { module ->
+            val containedRoutines = routines.filter { routine ->
+                routine.startLine >= module.startLine && routine.endLine <= module.endLine
+            }
+            module.copy(routines = containedRoutines)
+        }
+
         return ABBProgramFile(
             fileName = fileName,
             fileType = fileType,
             content = content,
-            modules = modules,
+            modules = modulesWithRoutines,
             routines = routines
         )
     }
@@ -169,7 +176,7 @@ class ABBParser {
                     } else {
                         "NOSTEPIN"
                     }
-                    moduleStartLine = index
+                    moduleStartLine = index + 1
                     moduleRoutines.clear()
                     moduleVariables.clear()
                 }
@@ -185,7 +192,7 @@ class ABBParser {
                             routines = moduleRoutines.toList(),
                             variables = moduleVariables.toList(),
                             startLine = moduleStartLine,
-                            endLine = index
+                            endLine = index + 1
                         )
                     )
                     currentModule = null
@@ -199,6 +206,20 @@ class ABBParser {
                      trimmedLine.startsWith("CONST", ignoreCase = true))) {
                 moduleVariables.add(trimmedLine)
             }
+        }
+
+        if (currentModule != null) {
+            // Gracefully close the last module if the file ended without ENDMODULE
+            modules.add(
+                ABBModule(
+                    name = currentModule,
+                    type = moduleType,
+                    routines = moduleRoutines.toList(),
+                    variables = moduleVariables.toList(),
+                    startLine = moduleStartLine,
+                    endLine = lines.size
+                )
+            )
         }
 
         return modules
@@ -220,81 +241,92 @@ class ABBParser {
         for ((index, line) in lines.withIndex()) {
             val trimmedLine = line.trim()
             
-            // Check for PROC declaration
-            if (trimmedLine.startsWith("PROC", ignoreCase = true)) {
-                val parts = trimmedLine.split(Regex("[\\s()]+"))
-                if (parts.size >= 2) {
-                    currentRoutine = parts[1]
+            val procMatch = Regex("^\\s*(LOCAL\\s+)?PROC\\s+(\\w+)\\s*(\\([^)]*\\))?", RegexOption.IGNORE_CASE)
+                .find(trimmedLine)
+            val funcMatch = Regex("^\\s*(LOCAL\\s+)?FUNC\\s+\\w+\\s+(\\w+)\\s*(\\([^)]*\\))?", RegexOption.IGNORE_CASE)
+                .find(trimmedLine)
+            val trapMatch = Regex("^\\s*(LOCAL\\s+)?TRAP\\s+(\\w+)", RegexOption.IGNORE_CASE)
+                .find(trimmedLine)
+
+            when {
+                procMatch != null -> {
+                    currentRoutine = procMatch.groupValues[2]
                     routineType = "PROC"
-                    startLine = index
+                    startLine = index + 1
                     parameters.clear()
                     localVars.clear()
-                    
-                    // Parse parameters if present
-                    if (trimmedLine.contains("(")) {
-                        val paramStr = trimmedLine.substringAfter("(").substringBefore(")")
+
+                    val paramGroup = procMatch.groupValues.getOrElse(3) { "" }
+                    if (paramGroup.contains("(")) {
+                        val paramStr = paramGroup.substringAfter("(").substringBefore(")")
                         if (paramStr.isNotBlank()) {
                             parameters.addAll(paramStr.split(",").map { it.trim() })
                         }
                     }
                 }
-            }
-            
-            // Check for FUNC declaration
-            else if (trimmedLine.startsWith("FUNC", ignoreCase = true)) {
-                val parts = trimmedLine.split(Regex("[\\s()]+"))
-                if (parts.size >= 3) {
-                    currentRoutine = parts[2]
+
+                funcMatch != null -> {
+                    currentRoutine = funcMatch.groupValues[2]
                     routineType = "FUNC"
-                    startLine = index
+                    startLine = index + 1
                     parameters.clear()
                     localVars.clear()
-                    
-                    // Parse parameters if present
-                    if (trimmedLine.contains("(")) {
-                        val paramStr = trimmedLine.substringAfter("(").substringBefore(")")
+
+                    val paramGroup = funcMatch.groupValues.getOrElse(3) { "" }
+                    if (paramGroup.contains("(")) {
+                        val paramStr = paramGroup.substringAfter("(").substringBefore(")")
                         if (paramStr.isNotBlank()) {
                             parameters.addAll(paramStr.split(",").map { it.trim() })
                         }
                     }
                 }
-            }
-            
-            // Check for TRAP declaration
-            else if (trimmedLine.startsWith("TRAP", ignoreCase = true)) {
-                val parts = trimmedLine.split(Regex("\\s+"))
-                if (parts.size >= 2) {
-                    currentRoutine = parts[1]
+
+                trapMatch != null -> {
+                    currentRoutine = trapMatch.groupValues[2]
                     routineType = "TRAP"
-                    startLine = index
+                    startLine = index + 1
                     parameters.clear()
                     localVars.clear()
                 }
-            }
-            
-            // Check for local variables in routine
-            else if (currentRoutine != null && trimmedLine.startsWith("VAR", ignoreCase = true)) {
-                localVars.add(trimmedLine)
-            }
-            
-            // Check for ENDPROC, ENDFUNC, ENDTRAP
-            else if (trimmedLine.startsWith("ENDPROC", ignoreCase = true) ||
-                     trimmedLine.startsWith("ENDFUNC", ignoreCase = true) ||
-                     trimmedLine.startsWith("ENDTRAP", ignoreCase = true)) {
-                if (currentRoutine != null) {
-                    routines.add(
-                        ABBRoutine(
-                            name = currentRoutine,
-                            type = routineType,
-                            parameters = parameters.toList(),
-                            localVariables = localVars.toList(),
-                            startLine = startLine,
-                            endLine = index
+
+                // Check for local variables in routine
+                currentRoutine != null && trimmedLine.startsWith("VAR", ignoreCase = true) -> {
+                    localVars.add(trimmedLine)
+                }
+
+                // Check for ENDPROC, ENDFUNC, ENDTRAP
+                trimmedLine.startsWith("ENDPROC", ignoreCase = true) ||
+                        trimmedLine.startsWith("ENDFUNC", ignoreCase = true) ||
+                        trimmedLine.startsWith("ENDTRAP", ignoreCase = true) -> {
+                    if (currentRoutine != null) {
+                        routines.add(
+                            ABBRoutine(
+                                name = currentRoutine,
+                                type = routineType,
+                                parameters = parameters.toList(),
+                                localVariables = localVars.toList(),
+                                startLine = startLine,
+                                endLine = index + 1
+                            )
                         )
-                    )
-                    currentRoutine = null
+                        currentRoutine = null
+                    }
                 }
             }
+        }
+
+        if (currentRoutine != null) {
+            // Close any unterminated routine at EOF so it still appears in selectors
+            routines.add(
+                ABBRoutine(
+                    name = currentRoutine,
+                    type = routineType,
+                    parameters = parameters.toList(),
+                    localVariables = localVars.toList(),
+                    startLine = startLine,
+                    endLine = lines.size
+                )
+            )
         }
 
         return routines
@@ -359,11 +391,31 @@ class ABBParser {
             }
         }
         
+        val lines = content.lines()
+
+        val filteredErrors = allErrors.filterNot { error ->
+            val line = lines.getOrNull(error.lineNumber - 1) ?: return@filterNot false
+            shouldIgnoreBalancedBracketError(line, error)
+        }
+
         // Sort by line number, then column
-        return allErrors.sortedWith(
+        return filteredErrors.sortedWith(
             compareBy<SyntaxError> { it.lineNumber }
                 .thenBy { it.columnStart }
         )
+    }
+
+    private fun shouldIgnoreBalancedBracketError(line: String, error: SyntaxError): Boolean {
+        val openIndex = line.indexOf('[')
+        val closeIndex = line.lastIndexOf(']')
+
+        if (openIndex == -1 || closeIndex == -1 || closeIndex < openIndex) return false
+
+        val bracketBalanced = line.count { it == '[' } == line.count { it == ']' }
+        val spanInsideBracket = error.columnStart in openIndex..closeIndex
+        val looksLikeArrayLiteral = line.contains(":=") && Regex("\\[[^\\]]*\\]").containsMatchIn(line)
+
+        return bracketBalanced && spanInsideBracket && looksLikeArrayLiteral
     }
 
     /**
