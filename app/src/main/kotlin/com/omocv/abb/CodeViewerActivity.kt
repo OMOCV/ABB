@@ -872,18 +872,40 @@ class CodeViewerActivity : AppCompatActivity() {
                 result.lineNumber,
                 result.startIndex,
                 result.endIndex,
-                HighlightColors.getSearchHighlightColor(this)
+                HighlightColors.getErrorHighlightColor(this)
             )
             dialog.dismiss()
         }
         
         dialog.show()
     }
-    
+
+    private fun resetHighlightStateForNewTarget() {
+        if (currentHighlightedLine == -1) return
+
+        if (isEditMode) {
+            val editableContent = etCodeContent.text
+            if (editableContent is Spannable) {
+                removeExistingHighlightSpans(editableContent)
+            }
+            etCodeContent.clearPersistentHighlight()
+        } else {
+            tvCodeContent.setOnClickListener(null)
+        }
+
+        currentHighlightSpan = null
+        currentHighlightRange = null
+        currentHighlightColor = null
+        currentHighlightColumns = null
+        currentHighlightedLine = -1
+    }
+
     private fun jumpToLine(
         lineNumber: Int,
         highlightColor: Int = HighlightColors.getLineHighlightColor(this)
     ) {
+        resetHighlightStateForNewTarget()
+
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val lines = content.lines()
         if (lineNumber > 0 && lineNumber <= lines.size) {
@@ -948,6 +970,8 @@ class CodeViewerActivity : AppCompatActivity() {
         columnEnd: Int,
         highlightColor: Int = HighlightColors.getErrorHighlightColor(this)
     ) {
+        resetHighlightStateForNewTarget()
+
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val lines = content.lines()
         if (lineNumber > 0 && lineNumber <= lines.size) {
