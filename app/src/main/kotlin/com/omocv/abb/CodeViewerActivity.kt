@@ -11,7 +11,6 @@ import android.widget.TextView
 import android.widget.EditText
 import android.widget.Toast
 import android.view.View
-import android.graphics.drawable.ColorDrawable
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -247,7 +246,7 @@ class CodeViewerActivity : AppCompatActivity() {
         }
 
         if (currentHighlightedLine != -1) {
-            reapplyCurrentHighlightIfNeeded()
+            reapplyCurrentHighlightIfNeeded(applyAfterLayout = true)
         }
 
         // Update menu
@@ -502,7 +501,23 @@ class CodeViewerActivity : AppCompatActivity() {
             tempFile.writeText(content)
             val parsedFile = abbParser.parseFile(tempFile)
             tempFile.delete()
-            parsedFile
+            if (parsedFile.modules.isEmpty() && parsedFile.routines.isNotEmpty()) {
+                val totalLines = content.lines().size
+                parsedFile.copy(
+                    modules = listOf(
+                        ABBModule(
+                            name = getString(R.string.default_module_name),
+                            type = "NOSTEPIN",
+                            routines = parsedFile.routines,
+                            variables = emptyList(),
+                            startLine = 1,
+                            endLine = totalLines
+                        )
+                    )
+                )
+            } else {
+                parsedFile
+            }
         } catch (e: Exception) {
             android.util.Log.e("CodeViewerActivity", "Error parsing content", e)
             currentProgramFile
@@ -561,30 +576,28 @@ class CodeViewerActivity : AppCompatActivity() {
             if (adapter.itemCount == 0) return
 
             val selectionView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
-            val tvTitle = selectionView.findViewById<TextView>(R.id.tvRoutineSelectionTitle)
+            val toolbar = selectionView.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbarRoutineSelection)
             val rvList = selectionView.findViewById<RecyclerView>(R.id.rvRoutines)
             val btnSelectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
             val btnDeselectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
 
-            tvTitle.text = getString(R.string.select_routines)
+            toolbar.title = getString(R.string.select_routines)
             rvList.layoutManager = LinearLayoutManager(this)
             rvList.adapter = adapter
 
             btnSelectAll.setOnClickListener { adapter.selectAll(); updateRoutineStatus() }
             btnDeselectAll.setOnClickListener { adapter.deselectAll(); updateRoutineStatus() }
 
-            val selectionDialog = MaterialAlertDialogBuilder(this)
-                .setView(selectionView)
-                .setPositiveButton(getString(R.string.ok), null)
-                .create()
-
+            val selectionDialog = android.app.Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+            selectionDialog.setContentView(selectionView)
             selectionDialog.setOnDismissListener { updateRoutineStatus() }
+            toolbar.setNavigationOnClickListener { selectionDialog.dismiss() }
+
             selectionDialog.show()
             selectionDialog.window?.setLayout(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
             )
-            selectionDialog.window?.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
         }
 
         fun showModuleSelectionDialog() {
@@ -592,30 +605,28 @@ class CodeViewerActivity : AppCompatActivity() {
             if (adapter.itemCount == 0) return
 
             val selectionView = layoutInflater.inflate(R.layout.dialog_routine_selection, null)
-            val tvTitle = selectionView.findViewById<TextView>(R.id.tvRoutineSelectionTitle)
+            val toolbar = selectionView.findViewById<com.google.android.material.appbar.MaterialToolbar>(R.id.toolbarRoutineSelection)
             val rvList = selectionView.findViewById<RecyclerView>(R.id.rvRoutines)
             val btnSelectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
             val btnDeselectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
 
-            tvTitle.text = getString(R.string.select_modules)
+            toolbar.title = getString(R.string.select_modules)
             rvList.layoutManager = LinearLayoutManager(this)
             rvList.adapter = adapter
 
             btnSelectAll.setOnClickListener { adapter.selectAll(); updateModuleStatus() }
             btnDeselectAll.setOnClickListener { adapter.deselectAll(); updateModuleStatus() }
 
-            val selectionDialog = MaterialAlertDialogBuilder(this)
-                .setView(selectionView)
-                .setPositiveButton(getString(R.string.ok), null)
-                .create()
-
+            val selectionDialog = android.app.Dialog(this, android.R.style.Theme_DeviceDefault_NoActionBar_Fullscreen)
+            selectionDialog.setContentView(selectionView)
             selectionDialog.setOnDismissListener { updateModuleStatus() }
+            toolbar.setNavigationOnClickListener { selectionDialog.dismiss() }
+
             selectionDialog.show()
             selectionDialog.window?.setLayout(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT
             )
-            selectionDialog.window?.setBackgroundDrawable(ColorDrawable(android.graphics.Color.TRANSPARENT))
         }
 
         btnOpenRoutineSelector.setOnClickListener {
@@ -719,14 +730,15 @@ class CodeViewerActivity : AppCompatActivity() {
                     val lines = content.lines().toMutableList()
                     
                     for (routine in selectedRoutines) {
-                        for (lineIdx in routine.startLine..routine.endLine.coerceAtMost(lines.size - 1)) {
-                            if (lineIdx < lines.size) {
-                                val line = lines[lineIdx]
-                                if (line.contains(searchText, ignoreCase = true)) {
-                                    val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
-                                    count += regex.findAll(line).count()
-                                    lines[lineIdx] = line.replace(searchText, replaceText, ignoreCase = true)
-                                }
+                        val start = (routine.startLine - 1).coerceAtLeast(0)
+                        val end = (routine.endLine - 1).coerceAtMost(lines.size - 1)
+
+                        for (lineIdx in start..end) {
+                            val line = lines[lineIdx]
+                            if (line.contains(searchText, ignoreCase = true)) {
+                                val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
+                                count += regex.findAll(line).count()
+                                lines[lineIdx] = line.replace(searchText, replaceText, ignoreCase = true)
                             }
                         }
                     }
@@ -740,14 +752,15 @@ class CodeViewerActivity : AppCompatActivity() {
                     val lines = content.lines().toMutableList()
                     
                     for (module in selectedModules) {
-                        for (lineIdx in module.startLine..module.endLine.coerceAtMost(lines.size - 1)) {
-                            if (lineIdx < lines.size) {
-                                val line = lines[lineIdx]
-                                if (line.contains(searchText, ignoreCase = true)) {
-                                    val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
-                                    count += regex.findAll(line).count()
-                                    lines[lineIdx] = line.replace(searchText, replaceText, ignoreCase = true)
-                                }
+                        val start = (module.startLine - 1).coerceAtLeast(0)
+                        val end = (module.endLine - 1).coerceAtMost(lines.size - 1)
+
+                        for (lineIdx in start..end) {
+                            val line = lines[lineIdx]
+                            if (line.contains(searchText, ignoreCase = true)) {
+                                val regex = Regex.escape(searchText).toRegex(RegexOption.IGNORE_CASE)
+                                count += regex.findAll(line).count()
+                                lines[lineIdx] = line.replace(searchText, replaceText, ignoreCase = true)
                             }
                         }
                     }
@@ -767,7 +780,7 @@ class CodeViewerActivity : AppCompatActivity() {
         }
 
         if (currentHighlightedLine != -1) {
-            reapplyCurrentHighlightIfNeeded()
+            reapplyCurrentHighlightIfNeeded(applyAfterLayout = true)
         }
 
         Toast.makeText(this, getString(R.string.replaced_count, count), Toast.LENGTH_SHORT).show()
@@ -822,14 +835,22 @@ class CodeViewerActivity : AppCompatActivity() {
         
         // Set adapter with click listener to dismiss dialog
         rvSearchResults.adapter = SearchResultAdapter(results, query) { result ->
-            jumpToLine(result.lineNumber)
+            jumpToLineAndColumn(
+                result.lineNumber,
+                result.startIndex,
+                result.endIndex,
+                HighlightColors.getSearchHighlightColor(this)
+            )
             dialog.dismiss()
         }
         
         dialog.show()
     }
     
-    private fun jumpToLine(lineNumber: Int) {
+    private fun jumpToLine(
+        lineNumber: Int,
+        highlightColor: Int = HighlightColors.getLineHighlightColor(this)
+    ) {
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val lines = content.lines()
         if (lineNumber > 0 && lineNumber <= lines.size) {
@@ -842,7 +863,7 @@ class CodeViewerActivity : AppCompatActivity() {
             if (isEditMode) {
                 // Highlight the line using the unified method FIRST
                 // This ensures background highlighting is visible before cursor placement
-                highlightLine(lineNumber)
+                highlightLine(lineNumber, highlightColor)
                 
                 // Find the first non-whitespace character on the line for cursor placement
                 val currentLine = lines[lineNumber - 1]
@@ -877,18 +898,23 @@ class CodeViewerActivity : AppCompatActivity() {
                         scrollViewCode.smoothScrollTo(0, lineTop)
                         
                         // Highlight the line using the unified method
-                        highlightLine(lineNumber)
+                        highlightLine(lineNumber, highlightColor)
                     }
                 }
             }
 
             Toast.makeText(this, getString(R.string.jumped_to_line, lineNumber), Toast.LENGTH_SHORT).show()
 
-            reapplyCurrentHighlightIfNeeded()
+            reapplyCurrentHighlightIfNeeded(applyAfterLayout = true)
         }
     }
     
-    private fun jumpToLineAndColumn(lineNumber: Int, columnStart: Int, columnEnd: Int) {
+    private fun jumpToLineAndColumn(
+        lineNumber: Int,
+        columnStart: Int,
+        columnEnd: Int,
+        highlightColor: Int = HighlightColors.getErrorHighlightColor(this)
+    ) {
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val lines = content.lines()
         if (lineNumber > 0 && lineNumber <= lines.size) {
@@ -900,7 +926,7 @@ class CodeViewerActivity : AppCompatActivity() {
             
             if (isEditMode) {
                 // Highlight the specific column range using the unified method FIRST
-                highlightLineAndColumn(lineNumber, columnStart, columnEnd)
+                highlightLineAndColumn(lineNumber, columnStart, columnEnd, highlightColor)
                 
                 // Calculate cursor position at the start of the error
                 val cursorPosition = charPosition + columnStart
@@ -928,7 +954,7 @@ class CodeViewerActivity : AppCompatActivity() {
                         scrollViewCode.smoothScrollTo(0, lineTop)
                         
                         // Highlight the specific column range using the unified method
-                        highlightLineAndColumn(lineNumber, columnStart, columnEnd)
+                        highlightLineAndColumn(lineNumber, columnStart, columnEnd, highlightColor)
                     }
                 }
             }
@@ -941,18 +967,17 @@ class CodeViewerActivity : AppCompatActivity() {
             }
             Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
 
-            reapplyCurrentHighlightIfNeeded()
+            reapplyCurrentHighlightIfNeeded(applyAfterLayout = true)
         }
     }
     
-    private fun highlightLine(lineNumber: Int) {
+    private fun highlightLine(lineNumber: Int, highlightColor: Int = HighlightColors.getLineHighlightColor(this)) {
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
 
         calculateHighlightRange(content, lineNumber, null)?.let { (startPos, endPos) ->
             currentHighlightedLine = lineNumber
             currentHighlightColumns = null
 
-            val highlightColor = HighlightColors.getLineHighlightColor(this)
             applyHighlightSpan(content, startPos, endPos, highlightColor, applyAfterLayout = true)
         }
     }
@@ -982,14 +1007,18 @@ class CodeViewerActivity : AppCompatActivity() {
         }
     }
 
-    private fun highlightLineAndColumn(lineNumber: Int, columnStart: Int, columnEnd: Int) {
+    private fun highlightLineAndColumn(
+        lineNumber: Int,
+        columnStart: Int,
+        columnEnd: Int,
+        highlightColor: Int = HighlightColors.getErrorHighlightColor(this)
+    ) {
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
 
         calculateHighlightRange(content, lineNumber, columnStart to columnEnd)?.let { (startPos, endPos) ->
             currentHighlightedLine = lineNumber
             currentHighlightColumns = columnStart to columnEnd
 
-            val highlightColor = HighlightColors.getErrorHighlightColor(this)
             applyHighlightSpan(content, startPos, endPos, highlightColor, applyAfterLayout = true)
         }
     }
@@ -1058,7 +1087,7 @@ class CodeViewerActivity : AppCompatActivity() {
         }
     }
 
-    private fun reapplyCurrentHighlightIfNeeded() {
+    private fun reapplyCurrentHighlightIfNeeded(applyAfterLayout: Boolean = false) {
         val range = currentHighlightRange
         val color = currentHighlightColor
         val lineNumber = currentHighlightedLine
@@ -1067,7 +1096,7 @@ class CodeViewerActivity : AppCompatActivity() {
             val content = if (isEditMode) etCodeContent.text.toString() else fileContent
             val recalculatedRange = calculateHighlightRange(content, lineNumber, currentHighlightColumns)
             val (start, end) = recalculatedRange ?: range
-            applyHighlightSpan(content, start, end, color)
+            applyHighlightSpan(content, start, end, color, applyAfterLayout)
         }
     }
 
@@ -1076,23 +1105,31 @@ class CodeViewerActivity : AppCompatActivity() {
         lineNumber: Int,
         columnRange: Pair<Int, Int>?
     ): Pair<Int, Int>? {
-        val lines = content.lines()
-        if (lineNumber <= 0 || lineNumber > lines.size) return null
+        if (lineNumber <= 0) return null
 
+        var currentLine = 1
         var startPos = 0
-        for (i in 0 until lineNumber - 1) {
-            startPos += lines[i].length + 1
+
+        while (currentLine < lineNumber && startPos < content.length) {
+            if (content[startPos] == '\n') {
+                currentLine++
+            }
+            startPos++
         }
 
-        val lineText = lines[lineNumber - 1]
-        val lineEndPos = startPos + lineText.length
+        if (currentLine != lineNumber) return null
+
+        var endPos = startPos
+        while (endPos < content.length && content[endPos] != '\n') {
+            endPos++
+        }
 
         return columnRange?.let { (columnStart, columnEnd) ->
-            val resolvedStart = (startPos + columnStart).coerceIn(startPos, lineEndPos)
-            val minimumSpanEnd = if (lineText.isNotEmpty()) resolvedStart + 1 else resolvedStart
-            val resolvedEnd = (startPos + max(columnEnd, columnStart)).coerceIn(minimumSpanEnd, lineEndPos)
+            val resolvedStart = (startPos + columnStart).coerceIn(startPos, endPos)
+            val minimumSpanEnd = if (endPos > startPos) resolvedStart + 1 else resolvedStart
+            val resolvedEnd = (startPos + max(columnEnd, columnStart)).coerceIn(minimumSpanEnd, endPos)
             resolvedStart to resolvedEnd
-        } ?: (startPos to lineEndPos)
+        } ?: (startPos to endPos)
     }
 
     private fun exportCode() {

@@ -60,6 +60,7 @@
     <string name="replace_in_selection">在选定范围替换</string>
     <string name="replace_routine_scope_hint">选择要替换的例行程序</string>
     <string name="replace_module_scope_hint">选择要替换的模块</string>
+    <string name="default_module_name">MainModule</string>
     <string name="replaced_count">已替换 %d 处</string>
     <string name="edit_code">编辑代码</string>
     <string name="save">保存</string>
