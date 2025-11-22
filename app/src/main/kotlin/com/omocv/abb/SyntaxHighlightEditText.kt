@@ -20,6 +20,7 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
     private var isInternalChange = false
     private var highlightingEnabled = true
     private var persistentHighlight: Triple<Int, Int, Int>? = null
+    private var persistentHighlightSpan: android.text.style.BackgroundColorSpan? = null
 
     init {
         addTextChangedListener(object : TextWatcher {
@@ -121,6 +122,10 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
      */
     fun clearPersistentHighlight() {
         persistentHighlight = null
+        persistentHighlightSpan?.let { span ->
+            text?.removeSpan(span)
+        }
+        persistentHighlightSpan = null
     }
 
     /**
@@ -134,11 +139,30 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
 
         val clampedStart = start.coerceIn(0, editable.length - 1)
         val clampedEnd = end.coerceIn(clampedStart + 1, editable.length)
+
+        // Remove any previous persistent span to avoid stacking and to ensure the most recent
+        // color is visible above syntax spans.
+        persistentHighlightSpan?.let { editable.removeSpan(it) }
+
+        val newSpan = android.text.style.BackgroundColorSpan(color)
+        persistentHighlightSpan = newSpan
+
         editable.setSpan(
-            android.text.style.BackgroundColorSpan(color),
+            newSpan,
             clampedStart,
             clampedEnd,
-            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE or android.text.Spanned.SPAN_PRIORITY
         )
+
+        // Force a redraw so the background shows immediately in edit mode.
+        invalidate()
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+
+        // Layout passes in edit mode can clear span rendering; ensure the persistent highlight
+        // is reapplied so the background remains visible after jumps.
+        reapplyPersistentHighlight()
     }
 }
