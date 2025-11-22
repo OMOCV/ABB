@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -16,6 +17,7 @@ import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.appbar.MaterialToolbar
+import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import android.text.Editable
 import android.text.TextWatcher
@@ -559,6 +561,8 @@ class CodeViewerActivity : AppCompatActivity() {
             tvRoutineStatus.text = when {
                 routineAdapter == null -> getString(R.string.no_routines_found)
                 routineAdapter.itemCount == 0 -> getString(R.string.no_routines_found)
+                routineAdapter.getSelectedRoutines().isEmpty() ->
+                    getString(R.string.routines_selected_with_hint, 0)
                 else -> getString(R.string.routines_selected, routineAdapter.getSelectedRoutines().size)
             }
         }
@@ -567,6 +571,8 @@ class CodeViewerActivity : AppCompatActivity() {
             tvModuleStatus.text = when {
                 moduleAdapter == null -> getString(R.string.no_modules_found)
                 moduleAdapter.itemCount == 0 -> getString(R.string.no_modules_found)
+                moduleAdapter.getSelectedModules().isEmpty() ->
+                    getString(R.string.modules_selected_with_hint, 0)
                 else -> getString(R.string.modules_selected, moduleAdapter.getSelectedModules().size)
             }
         }
@@ -581,6 +587,10 @@ class CodeViewerActivity : AppCompatActivity() {
             val btnSelectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
             val btnDeselectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
 
+            selectionView.setBackgroundColor(
+                MaterialColors.getColor(selectionView, com.google.android.material.R.attr.colorSurface)
+            )
+
             toolbar.title = getString(R.string.select_routines)
             rvList.layoutManager = LinearLayoutManager(this)
             rvList.adapter = adapter
@@ -592,6 +602,12 @@ class CodeViewerActivity : AppCompatActivity() {
             selectionDialog.setContentView(selectionView)
             selectionDialog.setOnDismissListener { updateRoutineStatus() }
             toolbar.setNavigationOnClickListener { selectionDialog.dismiss() }
+
+            selectionDialog.window?.setBackgroundDrawable(
+                ColorDrawable(
+                    MaterialColors.getColor(selectionView, com.google.android.material.R.attr.colorSurface)
+                )
+            )
 
             selectionDialog.show()
             selectionDialog.window?.setLayout(
@@ -610,6 +626,10 @@ class CodeViewerActivity : AppCompatActivity() {
             val btnSelectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnSelectAll)
             val btnDeselectAll = selectionView.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnDeselectAll)
 
+            selectionView.setBackgroundColor(
+                MaterialColors.getColor(selectionView, com.google.android.material.R.attr.colorSurface)
+            )
+
             toolbar.title = getString(R.string.select_modules)
             rvList.layoutManager = LinearLayoutManager(this)
             rvList.adapter = adapter
@@ -621,6 +641,12 @@ class CodeViewerActivity : AppCompatActivity() {
             selectionDialog.setContentView(selectionView)
             selectionDialog.setOnDismissListener { updateModuleStatus() }
             toolbar.setNavigationOnClickListener { selectionDialog.dismiss() }
+
+            selectionDialog.window?.setBackgroundDrawable(
+                ColorDrawable(
+                    MaterialColors.getColor(selectionView, com.google.android.material.R.attr.colorSurface)
+                )
+            )
 
             selectionDialog.show()
             selectionDialog.window?.setLayout(

@@ -100,12 +100,14 @@
     <string name="deselect_all">取消全选</string>
     <string name="no_routines_selected">未选择任何例行程序</string>
     <string name="no_routines_found">当前文件中未找到例行程序</string>
+    <string name="routines_selected_with_hint">已选择 %d 个例行程序（点击选择）</string>
     <string name="routines_selected">已选择 %d 个例行程序</string>
     <string name="jump_to_error">点击跳转到错误位置</string>
     <string name="syntax_errors_found">发现 %d 个语法错误，点击可跳转</string>
     <string name="select_modules">选择模块</string>
     <string name="no_modules_selected">未选择任何模块</string>
     <string name="no_modules_found">当前文件中未找到模块</string>
+    <string name="modules_selected_with_hint">已选择 %d 个模块（点击选择）</string>
     <string name="modules_selected">已选择 %d 个模块</string>
     <string name="no_bookmark_selected_for_removal">未选择任何要移除的书签</string>
     <string name="remove_bookmark">移除书签</string>
