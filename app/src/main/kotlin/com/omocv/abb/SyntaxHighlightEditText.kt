@@ -19,6 +19,7 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
     private val syntaxHighlighter = ABBSyntaxHighlighter()
     private var isInternalChange = false
     private var highlightingEnabled = true
+    private var persistentHighlight: Triple<Int, Int, Int>? = null
 
     init {
         addTextChangedListener(object : TextWatcher {
@@ -83,6 +84,20 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
                 )
             }
         }
+
+        // Reapply any persistent highlight (e.g., search or syntax error jump) so it isn't
+        // lost when syntax highlighting refreshes the text.
+        persistentHighlight?.let { (color, start, end) ->
+            if (start in 0..editable.length) {
+                val clampedEnd = end.coerceIn(start, editable.length)
+                editable.setSpan(
+                    android.text.style.BackgroundColorSpan(color),
+                    start,
+                    clampedEnd,
+                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                )
+            }
+        }
         
         // Restore cursor position
         if (cursorPosition >= 0 && cursorPosition <= editable.length) {
@@ -100,4 +115,18 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
     }
 
     fun isHighlightingEnabled(): Boolean = highlightingEnabled
+
+    /**
+     * Remember an external highlight range so it survives subsequent syntax highlighting updates.
+     */
+    fun setPersistentHighlight(color: Int, start: Int, end: Int) {
+        persistentHighlight = Triple(color, start, end)
+    }
+
+    /**
+     * Clear any remembered highlight so future syntax highlighting passes don't reapply it.
+     */
+    fun clearPersistentHighlight() {
+        persistentHighlight = null
+    }
 }

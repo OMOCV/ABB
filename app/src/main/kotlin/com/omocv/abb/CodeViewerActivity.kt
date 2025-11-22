@@ -1021,6 +1021,8 @@ class CodeViewerActivity : AppCompatActivity() {
             val color = currentHighlightColor
 
             if (isEditMode && range != null && color != null) {
+                etCodeContent.clearPersistentHighlight()
+
                 val editableContent = etCodeContent.text
                 if (editableContent is Spannable) {
                     removeExistingHighlightSpans(editableContent)
@@ -1079,6 +1081,12 @@ class CodeViewerActivity : AppCompatActivity() {
                         startPos.coerceAtMost(editableContent.length),
                         endPos.coerceAtMost(editableContent.length),
                         Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                    )
+
+                    etCodeContent.setPersistentHighlight(
+                        highlightColor,
+                        startPos.coerceAtMost(editableContent.length),
+                        endPos.coerceAtMost(editableContent.length)
                     )
 
                     etCodeContent.invalidate()
