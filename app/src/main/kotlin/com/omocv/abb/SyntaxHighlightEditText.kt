@@ -87,17 +87,7 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
 
         // Reapply any persistent highlight (e.g., search or syntax error jump) so it isn't
         // lost when syntax highlighting refreshes the text.
-        persistentHighlight?.let { (color, start, end) ->
-            if (start in 0..editable.length) {
-                val clampedEnd = end.coerceIn(start, editable.length)
-                editable.setSpan(
-                    android.text.style.BackgroundColorSpan(color),
-                    start,
-                    clampedEnd,
-                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-            }
-        }
+        reapplyPersistentHighlight()
         
         // Restore cursor position
         if (cursorPosition >= 0 && cursorPosition <= editable.length) {
@@ -121,6 +111,9 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
      */
     fun setPersistentHighlight(color: Int, start: Int, end: Int) {
         persistentHighlight = Triple(color, start, end)
+
+        // Apply immediately so callers don't need to worry about the timing of span restoration.
+        reapplyPersistentHighlight()
     }
 
     /**
@@ -128,5 +121,24 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
      */
     fun clearPersistentHighlight() {
         persistentHighlight = null
+    }
+
+    /**
+     * Apply the currently remembered highlight span to the editable text if possible.
+     */
+    private fun reapplyPersistentHighlight() {
+        val editable = text ?: return
+        val (color, start, end) = persistentHighlight ?: return
+
+        if (start < 0 || editable.isEmpty() || start >= editable.length) return
+
+        val clampedStart = start.coerceIn(0, editable.length - 1)
+        val clampedEnd = end.coerceIn(clampedStart + 1, editable.length)
+        editable.setSpan(
+            android.text.style.BackgroundColorSpan(color),
+            clampedStart,
+            clampedEnd,
+            android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+        )
     }
 }
