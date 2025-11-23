@@ -2,9 +2,10 @@ package com.omocv.abb
 
 import android.content.Context
 import android.text.Editable
-import android.text.Spannable
 import android.text.TextWatcher
 import android.util.AttributeSet
+import android.widget.ArrayAdapter
+import android.widget.ListPopupWindow
 import androidx.appcompat.widget.AppCompatEditText
 
 /**
@@ -19,8 +20,28 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
     private val syntaxHighlighter = ABBSyntaxHighlighter()
     private var isInternalChange = false
     private var highlightingEnabled = true
+    private var autoCompleteEnabled = false
+    private var currentSuggestions: List<String> = emptyList()
     private var persistentHighlight: Triple<Int, Int, Int>? = null
     private var persistentHighlightSpan: android.text.style.BackgroundColorSpan? = null
+    private var lastPrefixStart = 0
+
+    private val abbKeywords = listOf(
+        "MODULE", "ENDMODULE", "PROC", "ENDPROC", "FUNC", "ENDFUNC", "TRAP", "ENDTRAP",
+        "IF", "ELSEIF", "ELSE", "ENDIF", "WHILE", "ENDWHILE", "FOR", "ENDFOR", "TO",
+        "STEP", "DO", "TEST", "ENDTEST", "CASE", "DEFAULT", "PERS", "VAR", "LOCAL",
+        "CONST", "RETRY", "RAISE", "RETURN", "TASK", "CONNECT", "DISCONNECT", "GOTO"
+    )
+
+    private val suggestionPopup = ListPopupWindow(context).apply {
+        anchorView = this@SyntaxHighlightEditText
+        isModal = true
+        setOnItemClickListener { _, _, position, _ ->
+            val suggestion = currentSuggestions.getOrNull(position) ?: return@setOnItemClickListener
+            replaceCurrentPrefixWithSuggestion(suggestion)
+            dismiss()
+        }
+    }
 
     init {
         addTextChangedListener(object : TextWatcher {
@@ -32,8 +53,21 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
                 if (!isInternalChange && highlightingEnabled && s != null) {
                     applySyntaxHighlighting(s)
                 }
+
+                if (autoCompleteEnabled) {
+                    showCompletionSuggestions()
+                } else {
+                    suggestionPopup.dismiss()
+                }
             }
         })
+    }
+
+    fun setAutoCompleteEnabled(enabled: Boolean) {
+        autoCompleteEnabled = enabled
+        if (!enabled) {
+            suggestionPopup.dismiss()
+        }
     }
 
     private fun applySyntaxHighlighting(editable: Editable) {
@@ -100,6 +134,72 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
         }
         
         isInternalChange = false
+    }
+
+    private fun showCompletionSuggestions() {
+        val editable = text ?: return
+        val cursor = selectionStart
+        if (!hasFocus() || cursor <= 0 || cursor > editable.length) {
+            suggestionPopup.dismiss()
+            return
+        }
+
+        val (prefixStart, prefix) = extractCurrentPrefix(editable.toString(), cursor) ?: run {
+            suggestionPopup.dismiss()
+            return
+        }
+
+        if (prefix.length < 2) {
+            suggestionPopup.dismiss()
+            return
+        }
+
+        val matches = abbKeywords.filter { keyword ->
+            keyword.startsWith(prefix, ignoreCase = true) && !keyword.equals(prefix, ignoreCase = true)
+        }
+
+        if (matches.isEmpty()) {
+            suggestionPopup.dismiss()
+            return
+        }
+
+        lastPrefixStart = prefixStart
+        currentSuggestions = matches
+        suggestionPopup.setAdapter(
+            ArrayAdapter(context, android.R.layout.simple_list_item_1, matches)
+        )
+        if (!suggestionPopup.isShowing) {
+            suggestionPopup.show()
+        } else {
+            suggestionPopup.inputMethodMode = ListPopupWindow.INPUT_METHOD_NEEDED
+        }
+    }
+
+    private fun extractCurrentPrefix(content: String, cursor: Int): Pair<Int, String>? {
+        if (cursor > content.length) return null
+
+        var start = cursor - 1
+        while (start >= 0 && !content[start].isWhitespace() && content[start] != '\n') {
+            start--
+        }
+
+        val prefixStart = (start + 1).coerceAtLeast(0)
+        val prefix = content.substring(prefixStart, cursor)
+
+        return if (prefix.isEmpty()) null else Pair(prefixStart, prefix)
+    }
+
+    private fun replaceCurrentPrefixWithSuggestion(suggestion: String) {
+        val editable = text ?: return
+        val cursor = selectionStart
+        if (cursor < 0 || cursor > editable.length) return
+
+        val replacementStart = lastPrefixStart.coerceIn(0, cursor)
+        isInternalChange = true
+        editable.replace(replacementStart, cursor, suggestion)
+        setSelection(replacementStart + suggestion.length)
+        isInternalChange = false
+        applySyntaxHighlighting(editable)
     }
 
     fun setHighlightingEnabled(enabled: Boolean) {
