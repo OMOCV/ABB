@@ -1093,13 +1093,13 @@ class CodeViewerActivity : AppCompatActivity() {
         currentHighlightColor = highlightColor
 
         if (isEditMode) {
-            val applyToEditable = {
+            val applyToEditable = editableBlock@{
                 val editableContent = etCodeContent.text
                 if (editableContent is Spannable) {
                     removeExistingHighlightSpans(editableContent)
 
                     val textLength = editableContent.length
-                    if (textLength == 0) return@let
+                    if (textLength == 0) return@editableBlock
 
                     val resolvedStart = startPos.coerceIn(0, textLength - 1)
                     val desiredEnd = if (endPos <= resolvedStart) resolvedStart + 1 else endPos
