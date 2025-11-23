@@ -1098,9 +1098,12 @@ class CodeViewerActivity : AppCompatActivity() {
                 if (editableContent is Spannable) {
                     removeExistingHighlightSpans(editableContent)
 
-                    val resolvedStart = startPos.coerceAtMost(editableContent.length)
-                    val resolvedEnd = (endPos.takeIf { it > resolvedStart }
-                        ?: (resolvedStart + 1)).coerceAtMost(editableContent.length)
+                    val textLength = editableContent.length
+                    if (textLength == 0) return@let
+
+                    val resolvedStart = startPos.coerceIn(0, textLength - 1)
+                    val desiredEnd = if (endPos <= resolvedStart) resolvedStart + 1 else endPos
+                    val resolvedEnd = desiredEnd.coerceIn(resolvedStart + 1, textLength)
 
                     val highlightSpan = BackgroundColorSpan(highlightColor)
                     currentHighlightSpan = highlightSpan
@@ -1359,8 +1362,13 @@ class CodeViewerActivity : AppCompatActivity() {
 
     private fun applySavedTheme() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val mode = prefs.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-        AppCompatDelegate.setDefaultNightMode(mode)
+        val savedMode = prefs.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_NO)
+        val resolvedMode = if (savedMode == AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM) {
+            AppCompatDelegate.MODE_NIGHT_NO
+        } else {
+            savedMode
+        }
+        AppCompatDelegate.setDefaultNightMode(resolvedMode)
     }
 
     private fun checkSyntax() {

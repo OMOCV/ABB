@@ -76,14 +76,18 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
         // Restore saved BackgroundColorSpan (for highlighting search results and errors)
         // Create NEW spans with the saved color values instead of reusing the old span objects
         for ((color, start, end) in savedSpans) {
-            if (start >= 0 && end <= editable.length) {
-                editable.setSpan(
-                    android.text.style.BackgroundColorSpan(color),
-                    start,
-                    end,
-                    android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
-                )
-            }
+            if (editable.isEmpty()) continue
+
+            val clampedStart = start.coerceIn(0, editable.length - 1)
+            val desiredEnd = if (end <= clampedStart) clampedStart + 1 else end
+            val clampedEnd = desiredEnd.coerceIn(clampedStart + 1, editable.length)
+
+            editable.setSpan(
+                android.text.style.BackgroundColorSpan(color),
+                clampedStart,
+                clampedEnd,
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE or android.text.Spanned.SPAN_PRIORITY
+            )
         }
 
         // Reapply any persistent highlight (e.g., search or syntax error jump) so it isn't
