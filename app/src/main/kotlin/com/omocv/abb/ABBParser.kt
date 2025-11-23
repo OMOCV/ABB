@@ -660,9 +660,9 @@ class ABBParser {
         errors: MutableList<SyntaxError>,
         expectedType: String
     ) {
-        val columnStart = line.indexOf(endKeyword, ignoreCase = true)
+        val columnStart = line.indexOf(endKeyword, ignoreCase = true).takeIf { it >= 0 } ?: 0
         val columnEnd = columnStart + endKeyword.length
-        
+
         if (blockStack.isEmpty()) {
             val startKeyword = when (expectedType) {
                 "MODULE" -> "MODULE 模块名"
@@ -681,16 +681,34 @@ class ABBParser {
                 columnStart,
                 columnEnd
             ))
-        } else if (blockStack.last().type != expectedType) {
-            val openBlock = blockStack.last()
-            errors.add(SyntaxError(
-                lineNumber, 
-                "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 $endKeyword",
-                columnStart,
-                columnEnd
-            ))
         } else {
-            blockStack.removeAt(blockStack.size - 1)
+            val matchingIndex = blockStack.indexOfLast { it.type == expectedType }
+
+            if (matchingIndex == -1) {
+                val openBlock = blockStack.last()
+                errors.add(SyntaxError(
+                    lineNumber,
+                    "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 $endKeyword",
+                    columnStart,
+                    columnEnd
+                ))
+                return
+            }
+
+            // If there are unclosed inner blocks above the expected type, report them first
+            for (i in blockStack.size - 1 downTo matchingIndex + 1) {
+                val unclosedBlock = blockStack.removeAt(i)
+                errors.add(
+                    SyntaxError(
+                        unclosedBlock.lineNumber,
+                        "第 ${unclosedBlock.lineNumber} 行：${unclosedBlock.type} 代码块未正确闭合 - 在 $endKeyword 之前缺少 END${unclosedBlock.type}\n建议：在 $endKeyword 之前添加 END${unclosedBlock.type}",
+                        0,
+                        0
+                    )
+                )
+            }
+
+            blockStack.removeAt(matchingIndex)
         }
     }
     
