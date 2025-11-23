@@ -379,7 +379,7 @@ enum class TokenType {
     VAR, PERS, CONST,
     IF, THEN, ELSEIF, ELSE, ENDIF,
     FOR, FROM, TO, ENDFOR,
-    WHILE, ENDWHILE,
+    WHILE, DO, ENDWHILE,
     RETURN,
     TRUE, FALSE,
     MOVEJ, MOVEL, MOVEC,
@@ -472,6 +472,7 @@ class Lexer(private val source: String) {
                         "TO" -> TokenType.TO
                         "ENDFOR" -> TokenType.ENDFOR
                         "WHILE" -> TokenType.WHILE
+                        "DO" -> TokenType.DO
                         "ENDWHILE" -> TokenType.ENDWHILE
                         "RETURN" -> TokenType.RETURN
                         "TRUE" -> TokenType.TRUE
