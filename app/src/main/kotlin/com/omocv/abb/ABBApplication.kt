@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import androidx.appcompat.app.AppCompatDelegate
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -21,6 +22,8 @@ class ABBApplication : Application() {
         private const val TAG = "ABBApplication"
         private const val CRASH_LOG_DIR = "crash_logs"
         private const val MAX_LOG_FILES = 10
+        private const val PREFS_NAME = "ABBPrefs"
+        private const val KEY_THEME_MODE = "theme_mode"
         
         @Volatile
         private var crashLogPath: String? = null
@@ -30,7 +33,20 @@ class ABBApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        applyStartupTheme()
         setupCrashHandler()
+    }
+
+    private fun applyStartupTheme() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val savedMode = prefs.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_NO)
+        val resolvedMode = if (savedMode == AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM) {
+            AppCompatDelegate.MODE_NIGHT_NO
+        } else {
+            savedMode
+        }
+
+        AppCompatDelegate.setDefaultNightMode(resolvedMode)
     }
 
     private fun setupCrashHandler() {
