@@ -138,7 +138,8 @@ class SyntaxHighlightEditText @JvmOverloads constructor(
         if (start < 0 || editable.isEmpty() || start >= editable.length) return
 
         val clampedStart = start.coerceIn(0, editable.length - 1)
-        val clampedEnd = end.coerceIn(clampedStart + 1, editable.length)
+        val desiredEnd = if (end <= start) start + 1 else end
+        val clampedEnd = desiredEnd.coerceIn(clampedStart + 1, editable.length)
 
         // Remove any previous persistent span to avoid stacking and to ensure the most recent
         // color is visible above syntax spans.

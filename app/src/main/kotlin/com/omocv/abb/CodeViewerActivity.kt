@@ -1098,19 +1098,23 @@ class CodeViewerActivity : AppCompatActivity() {
                 if (editableContent is Spannable) {
                     removeExistingHighlightSpans(editableContent)
 
+                    val resolvedStart = startPos.coerceAtMost(editableContent.length)
+                    val resolvedEnd = (endPos.takeIf { it > resolvedStart }
+                        ?: (resolvedStart + 1)).coerceAtMost(editableContent.length)
+
                     val highlightSpan = BackgroundColorSpan(highlightColor)
                     currentHighlightSpan = highlightSpan
                     editableContent.setSpan(
                         highlightSpan,
-                        startPos.coerceAtMost(editableContent.length),
-                        endPos.coerceAtMost(editableContent.length),
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        resolvedStart,
+                        resolvedEnd,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE or Spanned.SPAN_PRIORITY
                     )
 
                     etCodeContent.setPersistentHighlight(
                         highlightColor,
-                        startPos.coerceAtMost(editableContent.length),
-                        endPos.coerceAtMost(editableContent.length)
+                        resolvedStart,
+                        resolvedEnd
                     )
 
                     etCodeContent.invalidate()
@@ -1187,6 +1191,10 @@ class CodeViewerActivity : AppCompatActivity() {
         var endPos = startPos
         while (endPos < content.length && content[endPos] != '\n') {
             endPos++
+        }
+
+        if (endPos == startPos) {
+            endPos = (startPos + 1).coerceAtMost(content.length)
         }
 
         return columnRange?.let { (columnStart, columnEnd) ->
