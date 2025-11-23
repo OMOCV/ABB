@@ -192,8 +192,8 @@ class MainActivity : AppCompatActivity() {
             val fileExtension = fileName.substringAfterLast(".", "")
 
             // Check if it's a supported ABB file
-            if (fileExtension.lowercase() !in setOf("mod", "prg", "sys")) {
-                Toast.makeText(this, "不支持的文件格式。支持的格式: .mod, .prg, .sys", Toast.LENGTH_LONG).show()
+            if (fileExtension.lowercase() !in setOf("mod", "prg", "sys", "pgf")) {
+                Toast.makeText(this, "不支持的文件格式。支持的格式: .mod, .prg, .sys, .pgf", Toast.LENGTH_LONG).show()
                 return
             }
 

@@ -7,7 +7,7 @@ import java.io.File
 
 /**
  * Parser for ABB RAPID programming language files
- * Supports .mod (module), .prg (program), .sys (system) files
+ * Supports .mod (module), .prg (program), .sys (system), .pgf (program data) files
  */
 class ABBParser {
 

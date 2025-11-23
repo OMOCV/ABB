@@ -9,7 +9,7 @@
 
 ## 功能特性
 
-- ✅ 支持读取 ABB 机器人程序文件 (.mod, .prg, .sys)
+- ✅ 支持读取 ABB 机器人程序文件 (.mod, .prg, .sys, .pgf)
 - ✅ 识别和显示模块 (MODULE)
 - ✅ 识别和显示例行程序 (PROC, FUNC, TRAP)
 - ✅ RAPID 语言语法高亮显示
@@ -23,6 +23,7 @@
 1. **.mod** - 模块文件 (Module files)
 2. **.prg** - 程序文件 (Program files)
 3. **.sys** - 系统文件 (System files)
+4. **.pgf** - 程序数据文件 (Program data files)
 
 ## 技术实现
 

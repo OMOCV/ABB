@@ -909,6 +909,24 @@ class Parser(private val tokens: List<Token>) {
     private fun parseWhileStmt(): WhileStmt {
         val wTok = expect(TokenType.WHILE, "期望 WHILE")
         val cond = parseExpression()
+
+        if (peek().type != TokenType.DO) {
+            val unexpected = peek()
+            val message = if (unexpected.type == TokenType.TO) {
+                "WHILE 语句应使用 DO 关键字，检测到 '${unexpected.lexeme}'\n建议：将其更正为 DO，格式：WHILE 条件 DO"
+            } else {
+                "WHILE 循环缺少 DO 关键字\n建议：在条件后添加 DO，格式：WHILE 条件 DO"
+            }
+
+            diagnostics.add(Diagnostic(message, unexpected.span, Severity.ERROR))
+
+            if (unexpected.type != TokenType.ENDWHILE && unexpected.type != TokenType.EOF) {
+                advance()
+            }
+        } else {
+            advance() // consume DO
+        }
+
         val body = mutableListOf<StmtNode>()
         while (!isAtEnd() && peek().type != TokenType.ENDWHILE) {
             body.add(parseStatement())

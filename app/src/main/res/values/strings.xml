@@ -8,7 +8,7 @@
     <string name="module_label">模块</string>
     <string name="routine_label">例行程序</string>
     <string name="file_content">文件内容</string>
-    <string name="supported_formats">支持的格式: .mod, .prg, .sys</string>
+    <string name="supported_formats">支持的格式: .mod, .prg, .sys, .pgf</string>
     
     <!-- New features strings -->
     <string name="search">搜索</string>

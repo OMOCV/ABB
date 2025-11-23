@@ -36,6 +36,7 @@
                 <data android:pathPattern=".*\\.mod" />
                 <data android:pathPattern=".*\\.prg" />
                 <data android:pathPattern=".*\\.sys" />
+                <data android:pathPattern=".*\\.pgf" />
             </intent-filter>
         </activity>
         
