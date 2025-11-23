@@ -190,7 +190,7 @@ class CodeViewerActivity : AppCompatActivity() {
     }
     
     private fun handleBackPressed() {
-        if (hasUnsavedChanges) {
+        if (hasContentChangedFromOriginal()) {
             showUnsavedChangesPrompt(
                 onSave = {
                     saveChanges()
@@ -212,7 +212,7 @@ class CodeViewerActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
 
-        if (hasUnsavedChanges && !isChangingConfigurations && !isFinishing) {
+        if (hasContentChangedFromOriginal() && !isChangingConfigurations && !isFinishing) {
             showUnsavedChangesPrompt(
                 onSave = { saveChanges() },
                 onDiscard = { hasUnsavedChanges = false },
@@ -1413,16 +1413,28 @@ class CodeViewerActivity : AppCompatActivity() {
 
     private fun resolveSavedTheme(): Int {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val manuallySelected = prefs.getBoolean(
-            KEY_THEME_MANUALLY_SELECTED,
-            prefs.contains(KEY_THEME_MODE)
-        )
+        if (!prefs.contains(KEY_THEME_MANUALLY_SELECTED)) {
+            prefs.edit().putBoolean(KEY_THEME_MANUALLY_SELECTED, false).apply()
+        }
+
+        val manuallySelected = prefs.getBoolean(KEY_THEME_MANUALLY_SELECTED, false)
 
         return if (manuallySelected) {
             prefs.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_NO)
         } else {
             AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         }
+    }
+
+    private fun hasContentChangedFromOriginal(): Boolean {
+        val currentContent = if (isEditMode) {
+            etCodeContent.text.toString()
+        } else {
+            fileContent
+        }
+
+        hasUnsavedChanges = currentContent != originalContent
+        return hasUnsavedChanges
     }
 
     private fun isAutoCompleteEnabled(): Boolean {
