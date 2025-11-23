@@ -99,6 +99,7 @@ class ABBParser {
             
             var closestMatch: String? = null
             var minDistance = Int.MAX_VALUE
+            var bestScore = Double.NEGATIVE_INFINITY
             
             for (knownWord in allKnownWords) {
                 // Calculate distance
@@ -112,13 +113,17 @@ class ABBParser {
                 val similarity = 1.0 - (distance.toDouble() / maxOf(word.length, knownWord.length))
                 
                 if (isPrefix || (distance in 1..3 && similarity >= 0.5)) {
-                    if (distance < minDistance) {
+                    val prefixLength = word.commonPrefixWith(knownWord, ignoreCase = true).length
+                    val score = similarity + prefixLength * 0.01
+
+                    if (distance < minDistance || (distance == minDistance && score > bestScore)) {
                         minDistance = distance
+                        bestScore = score
                         closestMatch = knownWord
                     }
                 }
             }
-            
+
             return if (closestMatch != null) Pair(closestMatch, minDistance) else null
         }
     }
