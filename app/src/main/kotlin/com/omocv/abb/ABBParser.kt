@@ -426,6 +426,7 @@ class ABBParser {
         val errors = mutableListOf<SyntaxError>()
         val lines = content.lines()
         val blockStack = mutableListOf<BlockInfo>()
+        val potentialBlocks = mutableListOf<PotentialBlock>()
         
         lines.forEachIndexed { index, line ->
             val lineNumber = index + 1
@@ -445,7 +446,7 @@ class ABBParser {
             checkUnmatchedDelimiters(line, lineNumber, errors)
             
             // Check block structure matching
-            checkBlockStructure(trimmed, line, lineNumber, blockStack, errors)
+            checkBlockStructure(trimmed, line, lineNumber, blockStack, potentialBlocks, errors)
             
             // Check for invalid syntax patterns
             checkAssignmentStatements(trimmed, line, lineNumber, errors)
@@ -576,79 +577,125 @@ class ABBParser {
      * Check block structure matching (MODULE, PROC, FUNC, TRAP, IF, FOR, WHILE, TEST)
      */
     private fun checkBlockStructure(
-        trimmed: String, 
-        line: String, 
-        lineNumber: Int, 
-        blockStack: MutableList<BlockInfo>, 
+        trimmed: String,
+        line: String,
+        lineNumber: Int,
+        blockStack: MutableList<BlockInfo>,
+        potentialBlocks: MutableList<PotentialBlock>,
         errors: MutableList<SyntaxError>
     ) {
+        var matchedBlockKeyword = false
         when {
             // MODULE/ENDMODULE
             trimmed.matches(Regex("^MODULE\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
                 blockStack.add(BlockInfo("MODULE", lineNumber))
+                matchedBlockKeyword = true
             }
             trimmed.matches(Regex("^ENDMODULE\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                checkEndBlock("ENDMODULE", line, lineNumber, blockStack, errors, "MODULE")
+                checkEndBlock("ENDMODULE", line, lineNumber, blockStack, potentialBlocks, errors, "MODULE")
+                matchedBlockKeyword = true
             }
             
             // PROC/ENDPROC
             trimmed.matches(Regex("^PROC\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
                 blockStack.add(BlockInfo("PROC", lineNumber))
+                matchedBlockKeyword = true
             }
             trimmed.matches(Regex("^ENDPROC\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                checkEndBlock("ENDPROC", line, lineNumber, blockStack, errors, "PROC")
+                checkEndBlock("ENDPROC", line, lineNumber, blockStack, potentialBlocks, errors, "PROC")
+                matchedBlockKeyword = true
             }
             
             // FUNC/ENDFUNC
             trimmed.matches(Regex("^FUNC\\s+\\w+\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
                 blockStack.add(BlockInfo("FUNC", lineNumber))
+                matchedBlockKeyword = true
             }
             trimmed.matches(Regex("^ENDFUNC\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                checkEndBlock("ENDFUNC", line, lineNumber, blockStack, errors, "FUNC")
+                checkEndBlock("ENDFUNC", line, lineNumber, blockStack, potentialBlocks, errors, "FUNC")
+                matchedBlockKeyword = true
             }
             
             // TRAP/ENDTRAP
             trimmed.matches(Regex("^TRAP\\s+\\w+.*", RegexOption.IGNORE_CASE)) -> {
                 blockStack.add(BlockInfo("TRAP", lineNumber))
+                matchedBlockKeyword = true
             }
             trimmed.matches(Regex("^ENDTRAP\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                checkEndBlock("ENDTRAP", line, lineNumber, blockStack, errors, "TRAP")
+                checkEndBlock("ENDTRAP", line, lineNumber, blockStack, potentialBlocks, errors, "TRAP")
+                matchedBlockKeyword = true
             }
             
             // IF/ENDIF
             trimmed.matches(Regex("^IF\\s+.+\\s+THEN\\s*.*", RegexOption.IGNORE_CASE)) -> {
                 blockStack.add(BlockInfo("IF", lineNumber))
+                matchedBlockKeyword = true
             }
             trimmed.matches(Regex("^ENDIF\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                checkEndBlock("ENDIF", line, lineNumber, blockStack, errors, "IF")
+                checkEndBlock("ENDIF", line, lineNumber, blockStack, potentialBlocks, errors, "IF")
+                matchedBlockKeyword = true
             }
             
             // FOR/ENDFOR
             trimmed.matches(Regex("^FOR\\s+.+\\s+(FROM\\s+.+\\s+)?TO\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE)) -> {
                 blockStack.add(BlockInfo("FOR", lineNumber))
+                matchedBlockKeyword = true
             }
             trimmed.matches(Regex("^ENDFOR\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                checkEndBlock("ENDFOR", line, lineNumber, blockStack, errors, "FOR")
+                checkEndBlock("ENDFOR", line, lineNumber, blockStack, potentialBlocks, errors, "FOR")
+                matchedBlockKeyword = true
             }
             
             // WHILE/ENDWHILE
             trimmed.matches(Regex("^WHILE\\s+.+\\s+DO\\s*.*", RegexOption.IGNORE_CASE)) -> {
                 blockStack.add(BlockInfo("WHILE", lineNumber))
+                matchedBlockKeyword = true
             }
             trimmed.matches(Regex("^ENDWHILE\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                checkEndBlock("ENDWHILE", line, lineNumber, blockStack, errors, "WHILE")
+                checkEndBlock("ENDWHILE", line, lineNumber, blockStack, potentialBlocks, errors, "WHILE")
+                matchedBlockKeyword = true
             }
             
             // TEST/ENDTEST
             trimmed.matches(Regex("^TEST\\s+.+", RegexOption.IGNORE_CASE)) -> {
                 blockStack.add(BlockInfo("TEST", lineNumber))
+                matchedBlockKeyword = true
             }
             trimmed.matches(Regex("^ENDTEST\\s*.*", RegexOption.IGNORE_CASE)) -> {
-                checkEndBlock("ENDTEST", line, lineNumber, blockStack, errors, "TEST")
+                checkEndBlock("ENDTEST", line, lineNumber, blockStack, potentialBlocks, errors, "TEST")
+                matchedBlockKeyword = true
             }
+        }
+
+        if (!matchedBlockKeyword) {
+            recordPotentialBlockStart(trimmed, lineNumber, potentialBlocks)
         }
     }
     
+    private fun recordPotentialBlockStart(trimmed: String, lineNumber: Int, potentialBlocks: MutableList<PotentialBlock>) {
+        val firstWord = trimmed.split(Regex("\\s+")).firstOrNull() ?: return
+        val blockKeywords = listOf("MODULE", "PROC", "FUNC", "TRAP")
+        val upperWord = firstWord.uppercase()
+
+        if (blockKeywords.any { it.equals(upperWord, ignoreCase = true) }) return
+
+        val closest = blockKeywords
+            .map { keyword -> keyword to levenshteinDistance(upperWord, keyword) }
+            .minByOrNull { it.second }
+            ?: return
+
+        val (keyword, distance) = closest
+        val looksLikeDeclaration = trimmed.contains(Regex("^\\w+\\s+\\w+"))
+        val resemblesBlock = when (keyword) {
+            "PROC", "FUNC" -> looksLikeDeclaration && trimmed.contains("(")
+            else -> looksLikeDeclaration
+        }
+
+        if (resemblesBlock && distance in 1..2) {
+            potentialBlocks.add(PotentialBlock(keyword, lineNumber, firstWord))
+        }
+    }
+
     /**
      * Helper function to check END* block matching
      */
@@ -657,6 +704,7 @@ class ABBParser {
         line: String,
         lineNumber: Int,
         blockStack: MutableList<BlockInfo>,
+        potentialBlocks: MutableList<PotentialBlock>,
         errors: MutableList<SyntaxError>,
         expectedType: String
     ) {
@@ -685,13 +733,38 @@ class ABBParser {
             val matchingIndex = blockStack.indexOfLast { it.type == expectedType }
 
             if (matchingIndex == -1) {
-                val openBlock = blockStack.last()
-                errors.add(SyntaxError(
-                    lineNumber,
-                    "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 $endKeyword",
-                    columnStart,
-                    columnEnd
-                ))
+                val relatedTypo = potentialBlocks.lastOrNull { it.type == expectedType && it.lineNumber < lineNumber }
+                if (relatedTypo != null) {
+                    errors.add(
+                        SyntaxError(
+                            lineNumber,
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 与第 ${relatedTypo.lineNumber} 行的 ${relatedTypo.keyword} 不匹配 - 该行可能是 ${expectedType} 声明的拼写错误\n建议：将第 ${relatedTypo.lineNumber} 行的关键字更正为 ${expectedType}，或调整此处的结束关键字以匹配实际的开始块",
+                            columnStart,
+                            columnEnd
+                        )
+                    )
+                } else {
+                    val openBlock = blockStack.last()
+                    if (openBlock.type.equals("MODULE", ignoreCase = true)) {
+                        errors.add(
+                            SyntaxError(
+                                lineNumber,
+                                "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 没有对应的开始块 - 缺少 ${expectedType} 声明或其关键字可能存在拼写错误\n建议：在此之前添加正确的 ${expectedType} 声明，并确保使用匹配的结束关键字",
+                                columnStart,
+                                columnEnd
+                            )
+                        )
+                    } else {
+                        errors.add(
+                            SyntaxError(
+                                lineNumber,
+                                "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 $endKeyword",
+                                columnStart,
+                                columnEnd
+                            )
+                        )
+                    }
+                }
                 return
             }
 
@@ -1102,6 +1175,7 @@ class ABBParser {
     }
     
     data class BlockInfo(val type: String, val lineNumber: Int)
+    data class PotentialBlock(val type: String, val lineNumber: Int, val keyword: String)
     
     /**
      * Remove strings and comments from a line to simplify syntax checking
