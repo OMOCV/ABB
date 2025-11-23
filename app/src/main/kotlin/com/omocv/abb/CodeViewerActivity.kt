@@ -89,10 +89,10 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Apply saved theme before the activity is created so the initial render uses the preferred mode
+        AppCompatDelegate.setDefaultNightMode(resolveSavedTheme())
+
         super.onCreate(savedInstanceState)
-        
-        // Apply saved theme
-        applySavedTheme()
         
         try {
             setContentView(R.layout.activity_code_viewer)
@@ -872,18 +872,40 @@ class CodeViewerActivity : AppCompatActivity() {
                 result.lineNumber,
                 result.startIndex,
                 result.endIndex,
-                HighlightColors.getSearchHighlightColor(this)
+                HighlightColors.getErrorHighlightColor(this)
             )
             dialog.dismiss()
         }
         
         dialog.show()
     }
-    
+
+    private fun resetHighlightStateForNewTarget() {
+        if (currentHighlightedLine == -1) return
+
+        if (isEditMode) {
+            val editableContent = etCodeContent.text
+            if (editableContent is Spannable) {
+                removeExistingHighlightSpans(editableContent)
+            }
+            etCodeContent.clearPersistentHighlight()
+        } else {
+            tvCodeContent.setOnClickListener(null)
+        }
+
+        currentHighlightSpan = null
+        currentHighlightRange = null
+        currentHighlightColor = null
+        currentHighlightColumns = null
+        currentHighlightedLine = -1
+    }
+
     private fun jumpToLine(
         lineNumber: Int,
         highlightColor: Int = HighlightColors.getLineHighlightColor(this)
     ) {
+        resetHighlightStateForNewTarget()
+
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val lines = content.lines()
         if (lineNumber > 0 && lineNumber <= lines.size) {
@@ -948,6 +970,8 @@ class CodeViewerActivity : AppCompatActivity() {
         columnEnd: Int,
         highlightColor: Int = HighlightColors.getErrorHighlightColor(this)
     ) {
+        resetHighlightStateForNewTarget()
+
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val lines = content.lines()
         if (lineNumber > 0 && lineNumber <= lines.size) {
@@ -1021,6 +1045,8 @@ class CodeViewerActivity : AppCompatActivity() {
             val color = currentHighlightColor
 
             if (isEditMode && range != null && color != null) {
+                etCodeContent.clearPersistentHighlight()
+
                 val editableContent = etCodeContent.text
                 if (editableContent is Spannable) {
                     removeExistingHighlightSpans(editableContent)
@@ -1067,18 +1093,31 @@ class CodeViewerActivity : AppCompatActivity() {
         currentHighlightColor = highlightColor
 
         if (isEditMode) {
-            val applyToEditable = {
+            val applyToEditable = editableBlock@{
                 val editableContent = etCodeContent.text
                 if (editableContent is Spannable) {
                     removeExistingHighlightSpans(editableContent)
+
+                    val textLength = editableContent.length
+                    if (textLength == 0) return@editableBlock
+
+                    val resolvedStart = startPos.coerceIn(0, textLength - 1)
+                    val desiredEnd = if (endPos <= resolvedStart) resolvedStart + 1 else endPos
+                    val resolvedEnd = desiredEnd.coerceIn(resolvedStart + 1, textLength)
 
                     val highlightSpan = BackgroundColorSpan(highlightColor)
                     currentHighlightSpan = highlightSpan
                     editableContent.setSpan(
                         highlightSpan,
-                        startPos.coerceAtMost(editableContent.length),
-                        endPos.coerceAtMost(editableContent.length),
-                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                        resolvedStart,
+                        resolvedEnd,
+                        Spanned.SPAN_EXCLUSIVE_EXCLUSIVE or Spanned.SPAN_PRIORITY
+                    )
+
+                    etCodeContent.setPersistentHighlight(
+                        highlightColor,
+                        resolvedStart,
+                        resolvedEnd
                     )
 
                     etCodeContent.invalidate()
@@ -1155,6 +1194,10 @@ class CodeViewerActivity : AppCompatActivity() {
         var endPos = startPos
         while (endPos < content.length && content[endPos] != '\n') {
             endPos++
+        }
+
+        if (endPos == startPos) {
+            endPos = (startPos + 1).coerceAtMost(content.length)
         }
 
         return columnRange?.let { (columnStart, columnEnd) ->
@@ -1317,10 +1360,9 @@ class CodeViewerActivity : AppCompatActivity() {
         recreate()
     }
 
-    private fun applySavedTheme() {
+    private fun resolveSavedTheme(): Int {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val mode = prefs.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-        AppCompatDelegate.setDefaultNightMode(mode)
+        return prefs.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
     }
 
     private fun checkSyntax() {

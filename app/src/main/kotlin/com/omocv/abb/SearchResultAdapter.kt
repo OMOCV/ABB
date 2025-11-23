@@ -49,7 +49,7 @@ class SearchResultAdapter(
         val startIdx = result.lineContent.indexOf(searchQuery, ignoreCase = true)
         if (startIdx >= 0) {
             spannable.setSpan(
-                BackgroundColorSpan(HighlightColors.getSearchHighlightColor(holder.itemView.context)),
+                BackgroundColorSpan(HighlightColors.getErrorHighlightColor(holder.itemView.context)),
                 startIdx,
                 startIdx + searchQuery.length,
                 Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
