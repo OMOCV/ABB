@@ -89,10 +89,10 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Apply saved theme before the activity is created so the initial render uses the preferred mode
+        AppCompatDelegate.setDefaultNightMode(resolveSavedTheme())
+
         super.onCreate(savedInstanceState)
-        
-        // Apply saved theme
-        applySavedTheme()
         
         try {
             setContentView(R.layout.activity_code_viewer)
@@ -1360,7 +1360,7 @@ class CodeViewerActivity : AppCompatActivity() {
         recreate()
     }
 
-    private fun applySavedTheme() {
+    private fun resolveSavedTheme(): Int {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         val savedMode = prefs.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_NO)
         val resolvedMode = if (savedMode == AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM) {
@@ -1368,7 +1368,7 @@ class CodeViewerActivity : AppCompatActivity() {
         } else {
             savedMode
         }
-        AppCompatDelegate.setDefaultNightMode(resolvedMode)
+        return resolvedMode
     }
 
     private fun checkSyntax() {
