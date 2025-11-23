@@ -1362,6 +1362,12 @@ class CodeViewerActivity : AppCompatActivity() {
 
     private fun resolveSavedTheme(): Int {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (!prefs.contains(KEY_THEME_MODE)) {
+            prefs.edit()
+                .putInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+                .apply()
+        }
+
         return prefs.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
     }
 

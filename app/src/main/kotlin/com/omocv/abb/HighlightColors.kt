@@ -1,6 +1,7 @@
 package com.omocv.abb
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
@@ -17,7 +18,7 @@ object HighlightColors {
      * @return The color value for line highlighting
      */
     fun getLineHighlightColor(context: Context): Int {
-        return if (isDarkTheme()) {
+        return if (isDarkTheme(context)) {
             ContextCompat.getColor(context, R.color.code_highlight_line_dark)
         } else {
             ContextCompat.getColor(context, R.color.code_highlight_line)
@@ -30,7 +31,7 @@ object HighlightColors {
      * @return The color value for error highlighting
      */
     fun getErrorHighlightColor(context: Context): Int {
-        return if (isDarkTheme()) {
+        return if (isDarkTheme(context)) {
             ContextCompat.getColor(context, R.color.code_highlight_error_dark)
         } else {
             ContextCompat.getColor(context, R.color.code_highlight_error)
@@ -51,7 +52,15 @@ object HighlightColors {
      * Check if the app is currently in dark theme mode
      * @return true if dark theme is active, false otherwise
      */
-    private fun isDarkTheme(): Boolean {
-        return AppCompatDelegate.getDefaultNightMode() == AppCompatDelegate.MODE_NIGHT_YES
+    private fun isDarkTheme(context: Context): Boolean {
+        return when (AppCompatDelegate.getDefaultNightMode()) {
+            AppCompatDelegate.MODE_NIGHT_YES -> true
+            AppCompatDelegate.MODE_NIGHT_NO -> false
+            else -> {
+                val currentNightMode =
+                    context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                currentNightMode == Configuration.UI_MODE_NIGHT_YES
+            }
+        }
     }
 }
