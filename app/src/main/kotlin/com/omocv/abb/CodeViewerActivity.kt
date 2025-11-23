@@ -50,6 +50,7 @@ class CodeViewerActivity : AppCompatActivity() {
     private var currentSearchQuery = ""
     private var isEditMode = false
     private var hasUnsavedChanges = false
+    private var isSavePromptVisible = false
     private var currentProgramFile: ABBProgramFile? = null
     private var isScrollSyncing = false  // Flag to prevent infinite scroll loop
     private var currentHighlightedLine: Int = -1  // Track currently highlighted line
@@ -76,7 +77,9 @@ class CodeViewerActivity : AppCompatActivity() {
         private const val EXTRA_FILE_URI = "file_uri"
         private const val PREFS_NAME = "ABBPrefs"
         private const val KEY_THEME_MODE = "theme_mode"
+        private const val KEY_THEME_MANUALLY_SELECTED = "theme_manually_selected"
         private const val KEY_BOOKMARKS = "bookmarks_"
+        private const val KEY_AUTO_COMPLETE = "auto_complete_enabled"
         private const val KEY_REAL_TIME_CHECK = "real_time_syntax_check"
         
         fun newIntent(context: Context, fileName: String, fileContent: String, fileUri: String? = null): Intent {
@@ -151,11 +154,13 @@ class CodeViewerActivity : AppCompatActivity() {
         setSupportActionBar(toolbar)
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
         supportActionBar?.title = fileName
-        
+
         toolbar.setNavigationOnClickListener {
             handleBackPressed()
         }
-        
+
+        etCodeContent.setAutoCompleteEnabled(isAutoCompleteEnabled())
+
         // Synchronize scrolling between line numbers and code content
         setupScrollSynchronization()
     }
@@ -186,18 +191,14 @@ class CodeViewerActivity : AppCompatActivity() {
     
     private fun handleBackPressed() {
         if (hasUnsavedChanges) {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(getString(R.string.unsaved_changes))
-                .setMessage(getString(R.string.discard_changes))
-                .setPositiveButton(getString(R.string.save)) { _, _ ->
+            showUnsavedChangesPrompt(
+                onSave = {
                     saveChanges()
                     finish()
-                }
-                .setNegativeButton(getString(R.string.discard_changes)) { _, _ ->
-                    finish()
-                }
-                .setNeutralButton(getString(R.string.cancel), null)
-                .show()
+                },
+                onDiscard = { finish() },
+                onCancel = { }
+            )
         } else {
             finish()
         }
@@ -206,6 +207,51 @@ class CodeViewerActivity : AppCompatActivity() {
     @SuppressLint("MissingSuperCall")
     override fun onBackPressed() {
         handleBackPressed()
+    }
+
+    override fun onPause() {
+        super.onPause()
+
+        if (hasUnsavedChanges && !isChangingConfigurations && !isFinishing) {
+            showUnsavedChangesPrompt(
+                onSave = { saveChanges() },
+                onDiscard = { hasUnsavedChanges = false },
+                onCancel = { }
+            )
+        }
+    }
+
+    private fun showUnsavedChangesPrompt(
+        onSave: () -> Unit,
+        onDiscard: () -> Unit,
+        onCancel: (() -> Unit)? = null
+    ) {
+        if (isSavePromptVisible) return
+
+        isSavePromptVisible = true
+        MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.unsaved_changes))
+            .setMessage(getString(R.string.discard_changes))
+            .setPositiveButton(getString(R.string.save)) { _, _ ->
+                isSavePromptVisible = false
+                onSave()
+            }
+            .setNegativeButton(getString(R.string.discard_changes)) { _, _ ->
+                isSavePromptVisible = false
+                onDiscard()
+            }
+            .apply {
+                onCancel?.let {
+                    setNeutralButton(getString(R.string.cancel)) { _, _ ->
+                        isSavePromptVisible = false
+                        it()
+                    }
+                }
+            }
+            .setOnDismissListener {
+                isSavePromptVisible = false
+            }
+            .show()
     }
 
     private fun displayContent() {
@@ -397,7 +443,11 @@ class CodeViewerActivity : AppCompatActivity() {
     
     private fun setupRealTimeSyntaxCheck() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        val enabled = prefs.getBoolean(KEY_REAL_TIME_CHECK, false)
+        val enabled = prefs.getBoolean(KEY_REAL_TIME_CHECK, true)
+
+        if (!prefs.contains(KEY_REAL_TIME_CHECK)) {
+            prefs.edit().putBoolean(KEY_REAL_TIME_CHECK, true).apply()
+        }
         
         if (enabled) {
             etCodeContent.addTextChangedListener(object : TextWatcher {
@@ -1348,11 +1398,12 @@ class CodeViewerActivity : AppCompatActivity() {
         } else {
             AppCompatDelegate.MODE_NIGHT_YES
         }
-        
+
         // Save preference
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
             .putInt(KEY_THEME_MODE, newMode)
+            .putBoolean(KEY_THEME_MANUALLY_SELECTED, true)
             .apply()
         
         // Apply theme
@@ -1362,13 +1413,24 @@ class CodeViewerActivity : AppCompatActivity() {
 
     private fun resolveSavedTheme(): Int {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        if (!prefs.contains(KEY_THEME_MODE)) {
-            prefs.edit()
-                .putInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
-                .apply()
-        }
+        val manuallySelected = prefs.getBoolean(
+            KEY_THEME_MANUALLY_SELECTED,
+            prefs.contains(KEY_THEME_MODE)
+        )
 
-        return prefs.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+        return if (manuallySelected) {
+            prefs.getInt(KEY_THEME_MODE, AppCompatDelegate.MODE_NIGHT_NO)
+        } else {
+            AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
+        }
+    }
+
+    private fun isAutoCompleteEnabled(): Boolean {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (!prefs.contains(KEY_AUTO_COMPLETE)) {
+            prefs.edit().putBoolean(KEY_AUTO_COMPLETE, true).apply()
+        }
+        return prefs.getBoolean(KEY_AUTO_COMPLETE, true)
     }
 
     private fun checkSyntax() {
