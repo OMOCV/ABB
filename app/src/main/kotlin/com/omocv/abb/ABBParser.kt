@@ -711,20 +711,21 @@ class ABBParser {
         val columnStart = line.indexOf(endKeyword, ignoreCase = true).takeIf { it >= 0 } ?: 0
         val columnEnd = columnStart + endKeyword.length
 
+        val startKeyword = when (expectedType) {
+            "MODULE" -> "MODULE 模块名"
+            "PROC" -> "PROC 过程名()"
+            "FUNC" -> "FUNC 返回类型 函数名()"
+            "TRAP" -> "TRAP 陷阱名"
+            "IF" -> "IF 条件 THEN"
+            "FOR" -> "FOR 变量 FROM 起始值 TO 结束值 DO"
+            "WHILE" -> "WHILE 条件 DO"
+            "TEST" -> "TEST 表达式"
+            else -> expectedType
+        }
+
         if (blockStack.isEmpty()) {
-            val startKeyword = when (expectedType) {
-                "MODULE" -> "MODULE 模块名"
-                "PROC" -> "PROC 过程名()"
-                "FUNC" -> "FUNC 返回类型 函数名()"
-                "TRAP" -> "TRAP 陷阱名"
-                "IF" -> "IF 条件 THEN"
-                "FOR" -> "FOR 变量 FROM 起始值 TO 结束值 DO"
-                "WHILE" -> "WHILE 条件 DO"
-                "TEST" -> "TEST 表达式"
-                else -> expectedType
-            }
             errors.add(SyntaxError(
-                lineNumber, 
+                lineNumber,
                 "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 没有对应的开始块 - 缺少 $expectedType 声明\n建议：在此之前添加 $startKeyword",
                 columnStart,
                 columnEnd
@@ -744,26 +745,14 @@ class ABBParser {
                         )
                     )
                 } else {
-                    val openBlock = blockStack.last()
-                    if (openBlock.type.equals("MODULE", ignoreCase = true)) {
-                        errors.add(
-                            SyntaxError(
-                                lineNumber,
-                                "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 没有对应的开始块 - 缺少 ${expectedType} 声明或其关键字可能存在拼写错误\n建议：在此之前添加正确的 ${expectedType} 声明，并确保使用匹配的结束关键字",
-                                columnStart,
-                                columnEnd
-                            )
+                    errors.add(
+                        SyntaxError(
+                            lineNumber,
+                            "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 没有对应的开始块 - 缺少 ${expectedType} 声明或其关键字可能存在拼写错误\n建议：在此之前添加 ${startKeyword}，并确保使用匹配的结束关键字",
+                            columnStart,
+                            columnEnd
                         )
-                    } else {
-                        errors.add(
-                            SyntaxError(
-                                lineNumber,
-                                "第 $lineNumber 行，第 ${columnStart + 1} 列：$endKeyword 与第 ${openBlock.lineNumber} 行的 ${openBlock.type} 不匹配\n建议：应使用 END${openBlock.type} 而不是 $endKeyword",
-                                columnStart,
-                                columnEnd
-                            )
-                        )
-                    }
+                    )
                 }
                 return
             }
@@ -1097,10 +1086,25 @@ class ABBParser {
                 positionsToCheck.add(0) // Just check the keyword
                 // Position 1 for MODULE is the module name (user-defined, don't check)
             }
-            // Control structures: check the keywords only
-            firstWord in setOf("IF", "WHILE", "FOR", "TEST", "RETURN") -> {
+            // Control structures: check the keywords and logical operators within the condition
+            firstWord in setOf("IF", "ELSEIF", "WHILE", "FOR", "TEST", "RETURN") -> {
                 positionsToCheck.add(0) // The keyword
-                // The rest are expressions/variables (don't check)
+
+                val logicalKeywords = setOf("AND", "OR", "XOR", "NOT", "THEN", "ELSEIF", "ELSE")
+                matches.forEachIndexed { idx, match ->
+                    if (idx == 0) return@forEachIndexed
+
+                    val wordUpper = match.value.uppercase()
+                    val isLogicalSlot = logicalKeywords.any { keyword ->
+                        wordUpper == keyword ||
+                            (keyword.startsWith(wordUpper) && wordUpper.length >= 2) ||
+                            levenshteinDistance(wordUpper, keyword) == 1
+                    }
+
+                    if (isLogicalSlot) {
+                        positionsToCheck.add(idx)
+                    }
+                }
             }
             // For statements starting with a potential instruction call (like WaitTime, TPWrite)
             // Check position 0 as it should be an instruction
