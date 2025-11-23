@@ -58,6 +58,7 @@ class CodeViewerActivity : AppCompatActivity() {
     private var currentHighlightRange: Pair<Int, Int>? = null
     private var currentHighlightColor: Int? = null
     private var currentHighlightColumns: Pair<Int, Int>? = null
+    private var pendingExitAfterSave = false
     
     // File save launcher for save-as functionality
     private val saveFileLauncher = registerForActivityResult(
@@ -68,6 +69,8 @@ class CodeViewerActivity : AppCompatActivity() {
                 val content = if (isEditMode) etCodeContent.text.toString() else fileContent
                 saveToUri(uri, content)
             }
+        } else if (pendingExitAfterSave) {
+            pendingExitAfterSave = false
         }
     }
     
@@ -92,6 +95,9 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Reset manual theme overrides on a fresh launch so the default follows the system theme
+        clearManualThemeSelectionIfFirstLaunch(savedInstanceState)
+
         // Apply saved theme before the activity is created so the initial render uses the preferred mode
         AppCompatDelegate.setDefaultNightMode(resolveSavedTheme())
 
@@ -193,8 +199,8 @@ class CodeViewerActivity : AppCompatActivity() {
         if (hasContentChangedFromOriginal()) {
             showUnsavedChangesPrompt(
                 onSave = {
-                    saveChanges()
-                    finish()
+                    pendingExitAfterSave = true
+                    invokeMenuSaveAction()
                 },
                 onDiscard = { finish() },
                 onCancel = { }
@@ -214,7 +220,7 @@ class CodeViewerActivity : AppCompatActivity() {
 
         if (hasContentChangedFromOriginal() && !isChangingConfigurations && !isFinishing) {
             showUnsavedChangesPrompt(
-                onSave = { saveChanges() },
+                onSave = { invokeMenuSaveAction() },
                 onDiscard = { hasUnsavedChanges = false },
                 onCancel = { }
             )
@@ -252,6 +258,15 @@ class CodeViewerActivity : AppCompatActivity() {
                 isSavePromptVisible = false
             }
             .show()
+    }
+
+    private fun invokeMenuSaveAction() {
+        val saveItem = toolbar.menu?.findItem(R.id.action_save)
+        if (saveItem != null && saveItem.isVisible) {
+            onOptionsItemSelected(saveItem)
+        } else {
+            saveChanges()
+        }
     }
 
     private fun displayContent() {
@@ -305,7 +320,7 @@ class CodeViewerActivity : AppCompatActivity() {
         if (isEditMode) {
             fileContent = etCodeContent.text.toString()
         }
-        
+
         // Show save options dialog
         MaterialAlertDialogBuilder(this)
             .setTitle(getString(R.string.save_options))
@@ -320,7 +335,12 @@ class CodeViewerActivity : AppCompatActivity() {
             .setNegativeButton(getString(R.string.save_as_new_file)) { _, _ ->
                 saveAsNewFile(fileContent)
             }
-            .setNeutralButton(getString(R.string.cancel), null)
+            .setNeutralButton(getString(R.string.cancel)) { _, _ ->
+                pendingExitAfterSave = false
+            }
+            .setOnCancelListener {
+                pendingExitAfterSave = false
+            }
             .show()
     }
     
@@ -398,17 +418,26 @@ class CodeViewerActivity : AppCompatActivity() {
                 stream.write(content.toByteArray(Charsets.UTF_8))
                 stream.flush()
             }
-            
+
             originalContent = content
             hasUnsavedChanges = false
             Toast.makeText(this, getString(R.string.file_saved_successfully), Toast.LENGTH_SHORT).show()
             displayContent()
+
+            if (pendingExitAfterSave) {
+                pendingExitAfterSave = false
+                finish()
+            }
         } catch (e: Exception) {
             android.util.Log.e("CodeViewerActivity", "Error saving file", e)
-            
+
+            if (pendingExitAfterSave) {
+                pendingExitAfterSave = false
+            }
+
             // Provide more specific error message and offer to save as new file
             val errorMsg = when {
-                e.message?.contains("Permission denied") == true || e is SecurityException -> 
+                e.message?.contains("Permission denied") == true || e is SecurityException ->
                     getString(R.string.permission_denied_try_save_as)
                 e.message?.contains("Could not open output stream") == true ->
                     getString(R.string.file_save_failed) + ": " + getString(R.string.permission_denied_try_save_as)
@@ -1387,8 +1416,20 @@ class CodeViewerActivity : AppCompatActivity() {
         } else {
             displayContent()
         }
-        
+
         Toast.makeText(this, getString(R.string.code_formatted), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun clearManualThemeSelectionIfFirstLaunch(savedInstanceState: Bundle?) {
+        if (savedInstanceState != null) return
+
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_THEME_MANUALLY_SELECTED, false)) {
+            prefs.edit()
+                .putBoolean(KEY_THEME_MANUALLY_SELECTED, false)
+                .remove(KEY_THEME_MODE)
+                .apply()
+        }
     }
 
     private fun toggleTheme() {
