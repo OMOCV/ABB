@@ -43,11 +43,8 @@ object HighlightColors {
      * @return The color value for search result highlighting
      */
     fun getSearchHighlightColor(context: Context): Int {
-        return if (isDarkTheme()) {
-            ContextCompat.getColor(context, R.color.code_highlight_search_dark)
-        } else {
-            ContextCompat.getColor(context, R.color.code_highlight_search)
-        }
+        // Keep search highlights visually consistent with syntax-check responses
+        return getErrorHighlightColor(context)
     }
     
     /**
