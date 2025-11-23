@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.graphics.drawable.ColorDrawable
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -1434,7 +1435,16 @@ class CodeViewerActivity : AppCompatActivity() {
 
     private fun toggleTheme() {
         val currentMode = AppCompatDelegate.getDefaultNightMode()
-        val newMode = if (currentMode == AppCompatDelegate.MODE_NIGHT_YES) {
+        val isCurrentlyNight = when (currentMode) {
+            AppCompatDelegate.MODE_NIGHT_YES -> true
+            AppCompatDelegate.MODE_NIGHT_NO -> false
+            else -> {
+                val nightModeFlags = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
+                nightModeFlags == Configuration.UI_MODE_NIGHT_YES
+            }
+        }
+
+        val newMode = if (isCurrentlyNight) {
             AppCompatDelegate.MODE_NIGHT_NO
         } else {
             AppCompatDelegate.MODE_NIGHT_YES
@@ -1446,7 +1456,7 @@ class CodeViewerActivity : AppCompatActivity() {
             .putInt(KEY_THEME_MODE, newMode)
             .putBoolean(KEY_THEME_MANUALLY_SELECTED, true)
             .apply()
-        
+
         // Apply theme
         AppCompatDelegate.setDefaultNightMode(newMode)
         recreate()
