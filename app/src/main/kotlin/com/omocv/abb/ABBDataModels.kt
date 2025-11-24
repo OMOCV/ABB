@@ -29,7 +29,7 @@ data class ABBRoutine(
  */
 data class ABBProgramFile(
     val fileName: String,
-    val fileType: String, // .mod, .prg, .sys
+    val fileType: String, // .mod, .prg, .sys, .pgf
     val content: String,
     val modules: List<ABBModule> = emptyList(),
     val routines: List<ABBRoutine> = emptyList()

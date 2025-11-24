@@ -18,10 +18,10 @@
 | 需求项 | 状态 | 实现说明 |
 |-------|------|---------|
 | 安卓端应用 | ✅ | 完整的 Android 应用，支持 API 24+ |
-| 读取 ABB 机器人程序 | ✅ | 支持 .mod, .prg, .sys 文件格式 |
+| 读取 ABB 机器人程序 | ✅ | 支持 .mod, .prg, .sys, .pgf 文件格式 |
 | 识别例行程序 | ✅ | 完整识别 PROC, FUNC, TRAP |
 | 识别模块 | ✅ | 完整识别 MODULE/ENDMODULE |
-| 支持所有 ABB 格式 | ✅ | .mod, .prg, .sys 全部支持 |
+| 支持所有 ABB 格式 | ✅ | .mod, .prg, .sys, .pgf 全部支持 |
 | 语法高亮 | ✅ | 6 种颜色高亮不同语法元素 |
 | 项目命名为 ABB | ✅ | rootProject.name = "ABB" |
 

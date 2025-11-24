@@ -8,7 +8,7 @@
     <string name="module_label">Modules</string>
     <string name="routine_label">Routines</string>
     <string name="file_content">File Content</string>
-    <string name="supported_formats">Supported formats: .mod, .prg, .sys</string>
+    <string name="supported_formats">Supported formats: .mod, .prg, .sys, .pgf</string>
     
     <!-- New features strings -->
     <string name="search">Search</string>

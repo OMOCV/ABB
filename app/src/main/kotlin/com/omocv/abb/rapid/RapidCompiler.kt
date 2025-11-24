@@ -76,7 +76,8 @@ private fun addIncompleteKeywordDiagnostic(
     val knownInstructions = setOf(
         "MoveJ", "MoveL", "MoveC", "MoveAbsJ", "MoveLDO", "MoveJDO",
         "SearchL", "SearchC", "TriggJ", "TriggL", "TriggC",
-        "SetDO", "SetAO", "SetGO", "PulseDO", "Reset",
+        "SetDO", "SetAO", "SetGO", "Set", "PulseDO", "Reset",
+        "ClkReset", "ClkStart", "ClkStop", "PLength",
         "WaitDI", "WaitAI", "WaitTime", "WaitUntil",
         "Stop", "Exit", "ErrWrite", "ErrRaise",
         "TPWrite", "TPReadNum", "TPReadFK", "TPReadDnum", "TPShow", "TPErase",
@@ -198,6 +199,11 @@ sealed interface StmtNode : AstNode
 
 data class BlockStmt(
     val statements: List<StmtNode>,
+    override val span: Span
+) : StmtNode
+
+data class LabelStmt(
+    val name: String,
     override val span: Span
 ) : StmtNode
 
@@ -379,7 +385,7 @@ enum class TokenType {
     VAR, PERS, CONST,
     IF, THEN, ELSEIF, ELSE, ENDIF,
     FOR, FROM, TO, ENDFOR,
-    WHILE, ENDWHILE,
+    WHILE, DO, ENDWHILE,
     RETURN,
     TRUE, FALSE,
     MOVEJ, MOVEL, MOVEC,
@@ -391,6 +397,7 @@ enum class TokenType {
     RECORD,
     LPAREN, RPAREN,
     LBRACKET, RBRACKET,
+    LBRACE, RBRACE,
     COMMA, COLON,
     ASSIGN,
     PLUS, MINUS, STAR, SLASH,
@@ -472,6 +479,7 @@ class Lexer(private val source: String) {
                         "TO" -> TokenType.TO
                         "ENDFOR" -> TokenType.ENDFOR
                         "WHILE" -> TokenType.WHILE
+                        "DO" -> TokenType.DO
                         "ENDWHILE" -> TokenType.ENDWHILE
                         "RETURN" -> TokenType.RETURN
                         "TRUE" -> TokenType.TRUE
@@ -521,6 +529,12 @@ class Lexer(private val source: String) {
                         }
                         ']' -> {
                             advance(); tokens.add(Token(TokenType.RBRACKET, "]", makeSpan(startLine, startCol)))
+                        }
+                        '{' -> {
+                            advance(); tokens.add(Token(TokenType.LBRACE, "{", makeSpan(startLine, startCol)))
+                        }
+                        '}' -> {
+                            advance(); tokens.add(Token(TokenType.RBRACE, "}", makeSpan(startLine, startCol)))
                         }
                         ',' -> {
                             advance(); tokens.add(Token(TokenType.COMMA, ",", makeSpan(startLine, startCol)))
@@ -655,6 +669,7 @@ class Parser(private val tokens: List<Token>) {
     private var pos = 0
 
     private fun peek(): Token = tokens[pos]
+    private fun peekNext(): Token? = tokens.getOrNull(pos + 1)
     private fun isAtEnd(): Boolean = peek().type == TokenType.EOF
     private fun advance(): Token = tokens[pos++]
     private fun match(vararg types: TokenType): Boolean {
@@ -862,6 +877,11 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun parseStatement(): StmtNode {
+        if (peek().type == TokenType.IDENT && peekNext()?.type == TokenType.COLON) {
+            val nameTok = advance()
+            val colonTok = advance()
+            return LabelStmt(nameTok.lexeme, mergeSpan(nameTok.span, colonTok.span))
+        }
         return when (peek().type) {
             TokenType.IF -> parseIfStmt()
             TokenType.WHILE -> parseWhileStmt()
@@ -909,6 +929,24 @@ class Parser(private val tokens: List<Token>) {
     private fun parseWhileStmt(): WhileStmt {
         val wTok = expect(TokenType.WHILE, "期望 WHILE")
         val cond = parseExpression()
+
+        if (peek().type != TokenType.DO) {
+            val unexpected = peek()
+            val message = if (unexpected.type == TokenType.TO) {
+                "WHILE 语句应使用 DO 关键字，检测到 '${unexpected.lexeme}'\n建议：将其更正为 DO，格式：WHILE 条件 DO"
+            } else {
+                "WHILE 循环缺少 DO 关键字\n建议：在条件后添加 DO，格式：WHILE 条件 DO"
+            }
+
+            diagnostics.add(Diagnostic(message, unexpected.span, Severity.ERROR))
+
+            if (unexpected.type != TokenType.ENDWHILE && unexpected.type != TokenType.EOF) {
+                advance()
+            }
+        } else {
+            advance() // consume DO
+        }
+
         val body = mutableListOf<StmtNode>()
         while (!isAtEnd() && peek().type != TokenType.ENDWHILE) {
             body.add(parseStatement())
@@ -1236,6 +1274,11 @@ class Parser(private val tokens: List<Token>) {
                     val r = expect(TokenType.RBRACKET, "数组访问缺少 ']'")
                     expr = ArrayAccess(expr, indexExpr, mergeSpan(expr.span, r.span))
                 }
+                match(TokenType.LBRACE) -> {
+                    val indexExpr = parseExpression()
+                    val r = expect(TokenType.RBRACE, "数组属性访问缺少 '}'")
+                    expr = ArrayAccess(expr, indexExpr, mergeSpan(expr.span, r.span))
+                }
                 match(TokenType.DOT) -> {
                     val fieldTok = expect(TokenType.IDENT, "点号后需要字段名")
                     expr = DotAccess(expr, fieldTok.lexeme, mergeSpan(expr.span, fieldTok.span))
@@ -1375,6 +1418,9 @@ class SemanticAnalyzer {
                 if (leftType != null && rightType != null && leftType != rightType) {
                     report("赋值类型不匹配: $leftType <- $rightType", stmt.span)
                 }
+            }
+            is LabelStmt -> {
+                // Labels don't affect semantics directly but should be recognized as valid syntax
             }
             is ExprStmt -> {
                 analyzeExpr(stmt.expr, scope)

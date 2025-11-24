@@ -25,7 +25,7 @@ ABB Robot Program Reader 采用 Material Design 3 设计，提供直观且美观
 ```
 - **样式**: Material Button (Elevated)
 - **功能**: 打开系统文件选择器
-- **支持格式**: .mod, .prg, .sys
+- **支持格式**: .mod, .prg, .sys, .pgf
 - **交互**: 点击打开文件浏览器
 
 ### 3. 文件信息区 (File Information)
@@ -222,7 +222,7 @@ ENDMODULE
 
 1. **不支持的文件格式**
    ```
-   Toast: "不支持的文件格式。支持的格式: .mod, .prg, .sys"
+   Toast: "不支持的文件格式。支持的格式: .mod, .prg, .sys, .pgf"
    ```
 
 2. **文件读取错误**

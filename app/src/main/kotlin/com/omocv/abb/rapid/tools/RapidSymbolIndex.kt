@@ -66,6 +66,7 @@ object RapidSymbolIndex {
                 walkExpr(stmt.target, index)
                 walkExpr(stmt.value, index)
             }
+            is LabelStmt -> { /* Labels are markers; no refs to record */ }
             is ExprStmt -> walkExpr(stmt.expr, index)
             is IfStmt -> {
                 stmt.branches.forEach {
