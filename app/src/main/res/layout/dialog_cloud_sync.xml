@@ -93,13 +93,23 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:inputType="textEmailAddress"
+                android:enabled="false"
                 android:singleLine="true" />
         </com.google.android.material.textfield.TextInputLayout>
 
         <TextView
+            android:id="@+id/tvGoogleStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingTop="8dp"
-            android:text="@string/cloud_google_hint" />
+            android:text="@string/cloud_google_not_signed_in" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnGoogleSignIn"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/cloud_google_sign_in" />
     </LinearLayout>
 </LinearLayout>

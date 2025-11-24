@@ -15,11 +15,13 @@ import android.widget.TextView
 import android.widget.EditText
 import android.widget.Toast
 import android.view.View
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -33,6 +35,16 @@ import android.widget.RadioGroup
 import android.util.Base64
 import kotlin.math.max
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.gms.auth.GoogleAuthUtil
+import com.google.android.gms.auth.UserRecoverableAuthException
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.Scopes
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
+import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -72,6 +84,9 @@ class CodeViewerActivity : AppCompatActivity() {
     private var collaborationSessionId: String? = null
     private var connectedRobot = false
     private var lastCloudSyncTime: Long = 0L
+    private lateinit var googleSignInClient: GoogleSignInClient
+    private var googleAccount: GoogleSignInAccount? = null
+    private var pendingGoogleRequest: CloudSyncRequest? = null
     
     // File save launcher for save-as functionality
     private val saveFileLauncher = registerForActivityResult(
@@ -84,6 +99,31 @@ class CodeViewerActivity : AppCompatActivity() {
             }
         } else if (pendingExitAfterSave) {
             pendingExitAfterSave = false
+        }
+    }
+
+    private val googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            handleGoogleAccount(account)
+            pendingGoogleRequest?.let {
+                pendingGoogleRequest = null
+                startCloudBackup(it)
+            }
+        } catch (e: ApiException) {
+            Toast.makeText(this, getString(R.string.cloud_sync_failed, e.localizedMessage ?: e.message ?: "Sign-in failed"), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private val googleAuthRecoveryLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            pendingGoogleRequest?.let {
+                pendingGoogleRequest = null
+                startCloudBackup(it)
+            }
+        } else {
+            Toast.makeText(this, R.string.cloud_google_consent_required, Toast.LENGTH_SHORT).show()
         }
     }
     
@@ -100,6 +140,7 @@ class CodeViewerActivity : AppCompatActivity() {
         private const val KEY_VCS_PREFIX = "vcs_snapshots_"
         private const val KEY_CLOUD_PREFIX = "cloud_sync_"
         private const val KEY_COLLAB_PREFIX = "collab_session_"
+        private const val GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
         
         fun newIntent(context: Context, fileName: String, fileContent: String, fileUri: String? = null): Intent {
             return Intent(context, CodeViewerActivity::class.java).apply {
@@ -132,6 +173,8 @@ class CodeViewerActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        initGoogleSignIn()
         
         fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
         fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
@@ -163,6 +206,15 @@ class CodeViewerActivity : AppCompatActivity() {
             ).show()
             // Don't finish - allow user to see what's displayed
         }
+    }
+
+    private fun initGoogleSignIn() {
+        val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestScopes(Scope(Scopes.DRIVE_FILE))
+            .build()
+        googleSignInClient = GoogleSignIn.getClient(this, options)
+        googleAccount = GoogleSignIn.getLastSignedInAccount(this)
     }
 
     private fun initViews() {
@@ -1715,6 +1767,15 @@ class CodeViewerActivity : AppCompatActivity() {
         showCloudSyncDialog()
     }
 
+    private fun launchGoogleSignIn() {
+        if (!::googleSignInClient.isInitialized) {
+            initGoogleSignIn()
+        }
+        googleSignInClient.signOut().addOnCompleteListener {
+            googleSignInLauncher.launch(googleSignInClient.signInIntent)
+        }
+    }
+
     private fun showCloudSyncDialog() {
         val view = layoutInflater.inflate(R.layout.dialog_cloud_sync, null)
         val providerGroup = view.findViewById<RadioGroup>(R.id.cloudProviderGroup)
@@ -1724,16 +1785,32 @@ class CodeViewerActivity : AppCompatActivity() {
         val etWebDavUser = view.findViewById<TextInputEditText>(R.id.etWebDavUser)
         val etWebDavPassword = view.findViewById<TextInputEditText>(R.id.etWebDavPassword)
         val etGoogleEmail = view.findViewById<TextInputEditText>(R.id.etGoogleEmail)
+        val tvGoogleStatus = view.findViewById<TextView>(R.id.tvGoogleStatus)
+        val btnGoogleSignIn = view.findViewById<MaterialButton>(R.id.btnGoogleSignIn)
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         etWebDavUrl.setText(prefs.getString("${KEY_CLOUD_PREFIX}webdav_url", ""))
         etWebDavUser.setText(prefs.getString("${KEY_CLOUD_PREFIX}webdav_user", ""))
         etGoogleEmail.setText(prefs.getString("${KEY_CLOUD_PREFIX}google_email", ""))
 
+        refreshGoogleUi(tvGoogleStatus, etGoogleEmail, btnGoogleSignIn)
+
         providerGroup.setOnCheckedChangeListener { _, checkedId ->
             val webDavSelected = checkedId == R.id.providerWebDav
             webDavContainer.visibility = if (webDavSelected) View.VISIBLE else View.GONE
             googleContainer.visibility = if (webDavSelected) View.GONE else View.VISIBLE
+            if (!webDavSelected) {
+                refreshGoogleUi(tvGoogleStatus, etGoogleEmail, btnGoogleSignIn)
+            }
+        }
+
+        btnGoogleSignIn.setOnClickListener {
+            if (!isNetworkAvailable()) {
+                Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            pendingGoogleRequest = null
+            launchGoogleSignIn()
         }
 
         val dialog = MaterialAlertDialogBuilder(this)
@@ -1768,9 +1845,11 @@ class CodeViewerActivity : AppCompatActivity() {
                         )
                     }
                     CloudProvider.GOOGLE -> {
-                        val email = etGoogleEmail.text?.toString()?.trim().orEmpty()
-                        if (email.isBlank()) {
-                            etGoogleEmail.error = getString(R.string.cloud_google_email)
+                        val email = googleAccount?.email ?: etGoogleEmail.text?.toString()?.trim().orEmpty()
+                        if (googleAccount == null) {
+                            Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
+                            pendingGoogleRequest = CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
+                            launchGoogleSignIn()
                             return@setOnClickListener
                         }
                         CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
@@ -1797,14 +1876,40 @@ class CodeViewerActivity : AppCompatActivity() {
         dialog.show()
     }
 
+    private fun refreshGoogleUi(statusView: TextView, emailField: TextInputEditText, actionButton: MaterialButton) {
+        val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
+        googleAccount = account
+        if (account != null) {
+            statusView.text = getString(R.string.cloud_google_signed_in, account.email)
+            emailField.setText(account.email)
+            actionButton.text = getString(R.string.cloud_google_switch)
+        } else {
+            statusView.text = getString(R.string.cloud_google_not_signed_in)
+            emailField.setText("")
+            actionButton.text = getString(R.string.cloud_google_sign_in)
+        }
+    }
+
+    private fun handleGoogleAccount(account: GoogleSignInAccount) {
+        googleAccount = account
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString("${KEY_CLOUD_PREFIX}google_email", account.email).apply()
+        Toast.makeText(this, getString(R.string.cloud_google_signed_in, account.email), Toast.LENGTH_SHORT).show()
+    }
+
     private fun startCloudBackup(request: CloudSyncRequest) {
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val progress = showSyncProgressDialog(getString(R.string.cloud_sync_ready, fileName))
+        val progressMessage = if (request.provider == CloudProvider.GOOGLE) {
+            getString(R.string.cloud_google_uploading)
+        } else {
+            getString(R.string.cloud_sync_ready, fileName)
+        }
+        val progress = showSyncProgressDialog(progressMessage)
 
         Thread {
             val result = when (request.provider) {
                 CloudProvider.WEBDAV -> uploadViaWebDav(request, content)
-                CloudProvider.GOOGLE -> simulateGoogleBackup(request, content)
+                CloudProvider.GOOGLE -> backupToGoogleDrive(request, content)
             }
 
             runOnUiThread {
@@ -1862,15 +1967,58 @@ class CodeViewerActivity : AppCompatActivity() {
         }
     }
 
-    private fun simulateGoogleBackup(request: CloudSyncRequest, content: String): CloudSyncResult {
-        val email = request.email ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_email))
+    private fun backupToGoogleDrive(request: CloudSyncRequest, content: String): CloudSyncResult {
+        val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
+        val email = account?.email ?: request.email ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+        if (account == null) {
+            return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+        }
+
+        val androidAccount = account.account ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+
         return try {
-            val dir = java.io.File(filesDir, "google_backup")
-            if (!dir.exists()) dir.mkdirs()
-            val safeEmail = email.replace("@", "_").replace(".", "_")
-            val file = java.io.File(dir, "${safeEmail}_$fileName")
-            file.writeText(content)
-            CloudSyncResult(true, "Google Drive ($email)")
+            val token = GoogleAuthUtil.getToken(applicationContext, androidAccount, "oauth2:$GOOGLE_DRIVE_SCOPE")
+            val boundary = "gcx-${System.currentTimeMillis()}"
+            val meta = "{" + "\"name\":\"$fileName\",\"mimeType\":\"text/plain\"" + "}"
+            val payload = buildString {
+                append("--$boundary\r\n")
+                append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
+                append(meta)
+                append("\r\n--$boundary\r\n")
+                append("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
+                append(content)
+                append("\r\n--$boundary--")
+            }
+
+            val url = URL("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart")
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 12000
+                readTimeout = 12000
+                doOutput = true
+                setRequestProperty("Authorization", "Bearer $token")
+                setRequestProperty("Content-Type", "multipart/related; boundary=$boundary")
+            }
+
+            connection.outputStream.use { stream ->
+                stream.write(payload.toByteArray(Charsets.UTF_8))
+            }
+
+            val success = connection.responseCode in 200..299
+            val target = "Google Drive ($email)"
+            connection.disconnect()
+            if (success) {
+                CloudSyncResult(true, target)
+            } else {
+                CloudSyncResult(false, target, "HTTP ${connection.responseCode}")
+            }
+        } catch (e: UserRecoverableAuthException) {
+            pendingGoogleRequest = request
+            runOnUiThread {
+                Toast.makeText(this, R.string.cloud_google_consent_required, Toast.LENGTH_SHORT).show()
+                googleAuthRecoveryLauncher.launch(e.intent)
+            }
+            CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_consent_required))
         } catch (e: Exception) {
             CloudSyncResult(false, "Google Drive", e.localizedMessage ?: e.message ?: "Google backup error")
         }
