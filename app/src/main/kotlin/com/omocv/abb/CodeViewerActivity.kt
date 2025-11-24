@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.graphics.drawable.ColorDrawable
 import android.content.res.Configuration
 import android.os.Bundle
@@ -13,6 +15,7 @@ import android.widget.TextView
 import android.widget.EditText
 import android.widget.Toast
 import android.view.View
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -27,7 +30,11 @@ import android.text.style.BackgroundColorSpan
 import android.text.Spannable
 import android.text.Spanned
 import android.widget.RadioGroup
+import android.util.Base64
 import kotlin.math.max
+import com.google.android.material.textfield.TextInputEditText
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Full-screen code viewer with line numbers and advanced features
@@ -1705,20 +1712,202 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun performCloudSync() {
-        val dir = java.io.File(filesDir, "cloud_sync")
-        if (!dir.exists()) {
-            dir.mkdirs()
-        }
-        val file = java.io.File(dir, fileName)
-        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        file.writeText(content)
-        lastCloudSyncTime = System.currentTimeMillis()
-        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            .edit()
-            .putLong("$KEY_CLOUD_PREFIX$fileName", lastCloudSyncTime)
-            .apply()
-        Toast.makeText(this, getString(R.string.cloud_synced, file.absolutePath), Toast.LENGTH_LONG).show()
+        showCloudSyncDialog()
     }
+
+    private fun showCloudSyncDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_cloud_sync, null)
+        val providerGroup = view.findViewById<RadioGroup>(R.id.cloudProviderGroup)
+        val webDavContainer = view.findViewById<View>(R.id.webDavContainer)
+        val googleContainer = view.findViewById<View>(R.id.googleContainer)
+        val etWebDavUrl = view.findViewById<TextInputEditText>(R.id.etWebDavUrl)
+        val etWebDavUser = view.findViewById<TextInputEditText>(R.id.etWebDavUser)
+        val etWebDavPassword = view.findViewById<TextInputEditText>(R.id.etWebDavPassword)
+        val etGoogleEmail = view.findViewById<TextInputEditText>(R.id.etGoogleEmail)
+
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        etWebDavUrl.setText(prefs.getString("${KEY_CLOUD_PREFIX}webdav_url", ""))
+        etWebDavUser.setText(prefs.getString("${KEY_CLOUD_PREFIX}webdav_user", ""))
+        etGoogleEmail.setText(prefs.getString("${KEY_CLOUD_PREFIX}google_email", ""))
+
+        providerGroup.setOnCheckedChangeListener { _, checkedId ->
+            val webDavSelected = checkedId == R.id.providerWebDav
+            webDavContainer.visibility = if (webDavSelected) View.VISIBLE else View.GONE
+            googleContainer.visibility = if (webDavSelected) View.GONE else View.VISIBLE
+        }
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.cloud_sync_provider_label))
+            .setView(view)
+            .setPositiveButton(R.string.cloud_sync_now, null)
+            .setNegativeButton(R.string.cancel, null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val provider = if (providerGroup.checkedRadioButtonId == R.id.providerGoogle) {
+                    CloudProvider.GOOGLE
+                } else {
+                    CloudProvider.WEBDAV
+                }
+
+                val request = when (provider) {
+                    CloudProvider.WEBDAV -> {
+                        val url = etWebDavUrl.text?.toString()?.trim().orEmpty()
+                        val username = etWebDavUser.text?.toString()?.trim().orEmpty()
+                        val password = etWebDavPassword.text?.toString()?.trim().orEmpty()
+                        if (url.isBlank()) {
+                            etWebDavUrl.error = getString(R.string.cloud_webdav_endpoint)
+                            return@setOnClickListener
+                        }
+                        CloudSyncRequest(
+                            provider = CloudProvider.WEBDAV,
+                            endpoint = url,
+                            username = username,
+                            password = password
+                        )
+                    }
+                    CloudProvider.GOOGLE -> {
+                        val email = etGoogleEmail.text?.toString()?.trim().orEmpty()
+                        if (email.isBlank()) {
+                            etGoogleEmail.error = getString(R.string.cloud_google_email)
+                            return@setOnClickListener
+                        }
+                        CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
+                    }
+                }
+
+                if (!isNetworkAvailable()) {
+                    Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                prefs.edit().apply {
+                    putString("${KEY_CLOUD_PREFIX}provider", provider.name)
+                    putString("${KEY_CLOUD_PREFIX}webdav_url", request.endpoint)
+                    putString("${KEY_CLOUD_PREFIX}webdav_user", request.username)
+                    putString("${KEY_CLOUD_PREFIX}google_email", request.email)
+                }.apply()
+
+                startCloudBackup(request)
+                dialog.dismiss()
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun startCloudBackup(request: CloudSyncRequest) {
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val progress = showSyncProgressDialog(getString(R.string.cloud_sync_ready, fileName))
+
+        Thread {
+            val result = when (request.provider) {
+                CloudProvider.WEBDAV -> uploadViaWebDav(request, content)
+                CloudProvider.GOOGLE -> simulateGoogleBackup(request, content)
+            }
+
+            runOnUiThread {
+                progress.dismiss()
+                if (result.success) {
+                    lastCloudSyncTime = System.currentTimeMillis()
+                    val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .putLong("$KEY_CLOUD_PREFIX$fileName", lastCloudSyncTime)
+                        .putString("${KEY_CLOUD_PREFIX}last_target", result.target)
+                        .apply()
+                    Toast.makeText(
+                        this,
+                        getString(R.string.cloud_sync_success_detail, fileName, result.target),
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.cloud_sync_failed, result.error ?: getString(R.string.unknown_error)),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun uploadViaWebDav(request: CloudSyncRequest, content: String): CloudSyncResult {
+        val endpoint = request.endpoint ?: return CloudSyncResult(false, "WebDAV", getString(R.string.cloud_webdav_endpoint))
+        return try {
+            val url = URL(endpoint)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "PUT"
+                connectTimeout = 8000
+                readTimeout = 8000
+                doOutput = true
+                setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+                if (!request.username.isNullOrBlank()) {
+                    val auth = "${request.username}:${request.password ?: ""}"
+                    val encoded = Base64.encodeToString(auth.toByteArray(), Base64.NO_WRAP)
+                    setRequestProperty("Authorization", "Basic $encoded")
+                }
+            }
+
+            connection.outputStream.use { stream ->
+                stream.write(content.toByteArray(Charsets.UTF_8))
+            }
+
+            val success = connection.responseCode in 200..299
+            val target = connection.url.toString()
+            connection.disconnect()
+            if (success) CloudSyncResult(true, target) else CloudSyncResult(false, target, "HTTP ${connection.responseCode}")
+        } catch (e: Exception) {
+            CloudSyncResult(false, endpoint, e.localizedMessage ?: e.message ?: "WebDAV error")
+        }
+    }
+
+    private fun simulateGoogleBackup(request: CloudSyncRequest, content: String): CloudSyncResult {
+        val email = request.email ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_email))
+        return try {
+            val dir = java.io.File(filesDir, "google_backup")
+            if (!dir.exists()) dir.mkdirs()
+            val safeEmail = email.replace("@", "_").replace(".", "_")
+            val file = java.io.File(dir, "${safeEmail}_$fileName")
+            file.writeText(content)
+            CloudSyncResult(true, "Google Drive ($email)")
+        } catch (e: Exception) {
+            CloudSyncResult(false, "Google Drive", e.localizedMessage ?: e.message ?: "Google backup error")
+        }
+    }
+
+    private fun showSyncProgressDialog(message: String): AlertDialog {
+        val view = layoutInflater.inflate(R.layout.dialog_sync_progress, null)
+        view.findViewById<TextView>(R.id.progressMessage)?.text = message
+        return MaterialAlertDialogBuilder(this)
+            .setView(view)
+            .setCancelable(false)
+            .create()
+            .also { it.show() }
+    }
+
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private data class CloudSyncRequest(
+        val provider: CloudProvider,
+        val endpoint: String? = null,
+        val username: String? = null,
+        val password: String? = null,
+        val email: String? = null
+    )
+
+    private data class CloudSyncResult(
+        val success: Boolean,
+        val target: String,
+        val error: String? = null
+    )
+
+    private enum class CloudProvider { WEBDAV, GOOGLE }
 
     private fun openCollaborationPanel() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

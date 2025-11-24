@@ -116,7 +116,16 @@ class FeatureHubActivity : AppCompatActivity() {
                 title = getString(R.string.feature_cloud_sync),
                 description = getString(R.string.feature_cloud_sync_desc),
                 status = FeatureStatus.Available,
-                onClick = { showInfoDialog(getString(R.string.feature_cloud_sync), getString(R.string.cloud_synced, "local")) }
+                onClick = {
+                    showInfoDialog(
+                        getString(R.string.feature_cloud_sync),
+                        getString(
+                            R.string.cloud_sync_success_detail,
+                            getString(R.string.app_name),
+                            getString(R.string.feature_cloud_sync_desc)
+                        )
+                    )
+                }
             ),
             FeatureCard(
                 title = getString(R.string.feature_collab),
