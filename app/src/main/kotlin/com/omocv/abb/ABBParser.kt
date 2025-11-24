@@ -41,7 +41,8 @@ class ABBParser {
             "MoveJ", "MoveL", "MoveC", "MoveAbsJ", "MoveLDO", "MoveJDO",
             "SearchL", "SearchC", "TriggJ", "TriggL", "TriggC",
             // I/O instructions
-            "SetDO", "SetAO", "SetGO", "PulseDO", "Reset",
+            "SetDO", "SetAO", "SetGO", "Set", "PulseDO", "Reset",
+            "ClkReset", "ClkStart", "ClkStop", "PLength",
             "WaitDI", "WaitAI", "WaitTime", "WaitUntil",
             // Program flow
             "Stop", "Exit", "ErrWrite", "ErrRaise",

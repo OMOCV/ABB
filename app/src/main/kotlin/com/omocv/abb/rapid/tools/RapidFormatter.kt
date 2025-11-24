@@ -149,6 +149,11 @@ class FormatContext(
                 formatExpr(s.value, sb)
                 sb.append(';')
             }
+            is LabelStmt -> {
+                indent(sb)
+                sb.append(s.name)
+                sb.append(':')
+            }
             is ExprStmt -> {
                 indent(sb)
                 formatExpr(s.expr, sb)

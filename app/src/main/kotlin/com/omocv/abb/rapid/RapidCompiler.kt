@@ -76,7 +76,8 @@ private fun addIncompleteKeywordDiagnostic(
     val knownInstructions = setOf(
         "MoveJ", "MoveL", "MoveC", "MoveAbsJ", "MoveLDO", "MoveJDO",
         "SearchL", "SearchC", "TriggJ", "TriggL", "TriggC",
-        "SetDO", "SetAO", "SetGO", "PulseDO", "Reset",
+        "SetDO", "SetAO", "SetGO", "Set", "PulseDO", "Reset",
+        "ClkReset", "ClkStart", "ClkStop", "PLength",
         "WaitDI", "WaitAI", "WaitTime", "WaitUntil",
         "Stop", "Exit", "ErrWrite", "ErrRaise",
         "TPWrite", "TPReadNum", "TPReadFK", "TPReadDnum", "TPShow", "TPErase",
@@ -198,6 +199,11 @@ sealed interface StmtNode : AstNode
 
 data class BlockStmt(
     val statements: List<StmtNode>,
+    override val span: Span
+) : StmtNode
+
+data class LabelStmt(
+    val name: String,
     override val span: Span
 ) : StmtNode
 
@@ -391,6 +397,7 @@ enum class TokenType {
     RECORD,
     LPAREN, RPAREN,
     LBRACKET, RBRACKET,
+    LBRACE, RBRACE,
     COMMA, COLON,
     ASSIGN,
     PLUS, MINUS, STAR, SLASH,
@@ -522,6 +529,12 @@ class Lexer(private val source: String) {
                         }
                         ']' -> {
                             advance(); tokens.add(Token(TokenType.RBRACKET, "]", makeSpan(startLine, startCol)))
+                        }
+                        '{' -> {
+                            advance(); tokens.add(Token(TokenType.LBRACE, "{", makeSpan(startLine, startCol)))
+                        }
+                        '}' -> {
+                            advance(); tokens.add(Token(TokenType.RBRACE, "}", makeSpan(startLine, startCol)))
                         }
                         ',' -> {
                             advance(); tokens.add(Token(TokenType.COMMA, ",", makeSpan(startLine, startCol)))
@@ -656,6 +669,7 @@ class Parser(private val tokens: List<Token>) {
     private var pos = 0
 
     private fun peek(): Token = tokens[pos]
+    private fun peekNext(): Token? = tokens.getOrNull(pos + 1)
     private fun isAtEnd(): Boolean = peek().type == TokenType.EOF
     private fun advance(): Token = tokens[pos++]
     private fun match(vararg types: TokenType): Boolean {
@@ -863,6 +877,11 @@ class Parser(private val tokens: List<Token>) {
     }
 
     private fun parseStatement(): StmtNode {
+        if (peek().type == TokenType.IDENT && peekNext()?.type == TokenType.COLON) {
+            val nameTok = advance()
+            val colonTok = advance()
+            return LabelStmt(nameTok.lexeme, mergeSpan(nameTok.span, colonTok.span))
+        }
         return when (peek().type) {
             TokenType.IF -> parseIfStmt()
             TokenType.WHILE -> parseWhileStmt()
@@ -1255,6 +1274,11 @@ class Parser(private val tokens: List<Token>) {
                     val r = expect(TokenType.RBRACKET, "数组访问缺少 ']'")
                     expr = ArrayAccess(expr, indexExpr, mergeSpan(expr.span, r.span))
                 }
+                match(TokenType.LBRACE) -> {
+                    val indexExpr = parseExpression()
+                    val r = expect(TokenType.RBRACE, "数组属性访问缺少 '}'")
+                    expr = ArrayAccess(expr, indexExpr, mergeSpan(expr.span, r.span))
+                }
                 match(TokenType.DOT) -> {
                     val fieldTok = expect(TokenType.IDENT, "点号后需要字段名")
                     expr = DotAccess(expr, fieldTok.lexeme, mergeSpan(expr.span, fieldTok.span))
@@ -1394,6 +1418,9 @@ class SemanticAnalyzer {
                 if (leftType != null && rightType != null && leftType != rightType) {
                     report("赋值类型不匹配: $leftType <- $rightType", stmt.span)
                 }
+            }
+            is LabelStmt -> {
+                // Labels don't affect semantics directly but should be recognized as valid syntax
             }
             is ExprStmt -> {
                 analyzeExpr(stmt.expr, scope)
