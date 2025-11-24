@@ -357,7 +357,11 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun openFolderBrowser() {
-        Toast.makeText(this, getString(R.string.feature_coming_soon), Toast.LENGTH_SHORT).show()
+        try {
+            startActivity(Intent(this, ProjectBrowserActivity::class.java))
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.feature_hub_open_project_error), Toast.LENGTH_LONG).show()
+        }
     }
     
     private var currentFileUri: Uri? = null

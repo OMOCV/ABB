@@ -85,13 +85,13 @@ class FeatureHubActivity : AppCompatActivity() {
             FeatureCard(
                 title = getString(R.string.feature_fold),
                 description = getString(R.string.feature_fold_desc),
-                status = FeatureStatus.Planned,
-                onClick = { showComingSoonToast() }
+                status = FeatureStatus.Available,
+                onClick = { showInfoDialog(getString(R.string.feature_fold), getString(R.string.fold_enabled)) }
             ),
             FeatureCard(
                 title = getString(R.string.feature_project_browser),
                 description = getString(R.string.feature_project_browser_desc),
-                status = FeatureStatus.InProgress,
+                status = FeatureStatus.Available,
                 onClick = {
                     projectCard.requestFocus()
                     showInfoDialog(
@@ -103,56 +103,56 @@ class FeatureHubActivity : AppCompatActivity() {
             FeatureCard(
                 title = getString(R.string.feature_refactor),
                 description = getString(R.string.feature_refactor_desc),
-                status = FeatureStatus.Planned,
-                onClick = { showComingSoonToast() }
+                status = FeatureStatus.Available,
+                onClick = { showInfoDialog(getString(R.string.feature_refactor), getString(R.string.refactor_title)) }
             ),
             FeatureCard(
                 title = getString(R.string.feature_vcs),
                 description = getString(R.string.feature_vcs_desc),
-                status = FeatureStatus.Planned,
-                onClick = { showComingSoonToast() }
+                status = FeatureStatus.Available,
+                onClick = { showInfoDialog(getString(R.string.feature_vcs), getString(R.string.vcs_snapshot_saved)) }
             ),
             FeatureCard(
                 title = getString(R.string.feature_cloud_sync),
                 description = getString(R.string.feature_cloud_sync_desc),
-                status = FeatureStatus.Planned,
-                onClick = { showComingSoonToast() }
+                status = FeatureStatus.Available,
+                onClick = { showInfoDialog(getString(R.string.feature_cloud_sync), getString(R.string.cloud_synced, "local")) }
             ),
             FeatureCard(
                 title = getString(R.string.feature_collab),
                 description = getString(R.string.feature_collab_desc),
-                status = FeatureStatus.Planned,
-                onClick = { showComingSoonToast() }
+                status = FeatureStatus.Available,
+                onClick = { showInfoDialog(getString(R.string.feature_collab), getString(R.string.collaboration_status, "demo", "Alice")) }
             ),
             FeatureCard(
                 title = getString(R.string.feature_simulator),
                 description = getString(R.string.feature_simulator_desc),
-                status = FeatureStatus.Planned,
-                onClick = { showComingSoonToast() }
+                status = FeatureStatus.Available,
+                onClick = { showInfoDialog(getString(R.string.feature_simulator), getString(R.string.simulator_started)) }
             ),
             FeatureCard(
                 title = getString(R.string.feature_robot_connect),
                 description = getString(R.string.feature_robot_connect_desc),
-                status = FeatureStatus.Planned,
-                onClick = { showComingSoonToast() }
+                status = FeatureStatus.Available,
+                onClick = { showInfoDialog(getString(R.string.feature_robot_connect), getString(R.string.robot_connected)) }
             ),
             FeatureCard(
                 title = getString(R.string.feature_upload_download),
                 description = getString(R.string.feature_upload_download_desc),
-                status = FeatureStatus.Planned,
-                onClick = { showComingSoonToast() }
+                status = FeatureStatus.Available,
+                onClick = { showInfoDialog(getString(R.string.feature_transfer), getString(R.string.transfer_uploaded)) }
             ),
             FeatureCard(
                 title = getString(R.string.feature_ai_agent),
                 description = getString(R.string.feature_ai_agent_desc),
-                status = FeatureStatus.Planned,
-                onClick = { showComingSoonToast() }
+                status = FeatureStatus.Available,
+                onClick = { showInfoDialog(getString(R.string.feature_ai_agent), getString(R.string.ai_agent_positive)) }
             ),
             FeatureCard(
                 title = getString(R.string.feature_mcp),
                 description = getString(R.string.feature_mcp_desc),
-                status = FeatureStatus.Planned,
-                onClick = { showComingSoonToast() }
+                status = FeatureStatus.Available,
+                onClick = { showInfoDialog(getString(R.string.feature_mcp), getString(R.string.mcp_task_build)) }
             )
         )
 

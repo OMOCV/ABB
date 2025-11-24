@@ -53,6 +53,12 @@
             android:parentActivityName=".MainActivity" />
 
         <activity
+            android:name=".ProjectBrowserActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ABB"
+            android:parentActivityName=".MainActivity" />
+
+        <activity
             android:name=".CrashReportActivity"
             android:exported="false"
             android:theme="@style/Theme.ABB"

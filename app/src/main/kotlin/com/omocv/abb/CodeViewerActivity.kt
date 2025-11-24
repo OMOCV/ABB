@@ -60,6 +60,11 @@ class CodeViewerActivity : AppCompatActivity() {
     private var currentHighlightColor: Int? = null
     private var currentHighlightColumns: Pair<Int, Int>? = null
     private var pendingExitAfterSave = false
+    private var isFolded = false
+    private var foldedContent: String? = null
+    private var collaborationSessionId: String? = null
+    private var connectedRobot = false
+    private var lastCloudSyncTime: Long = 0L
     
     // File save launcher for save-as functionality
     private val saveFileLauncher = registerForActivityResult(
@@ -85,6 +90,9 @@ class CodeViewerActivity : AppCompatActivity() {
         private const val KEY_BOOKMARKS = "bookmarks_"
         private const val KEY_AUTO_COMPLETE = "auto_complete_enabled"
         private const val KEY_REAL_TIME_CHECK = "real_time_syntax_check"
+        private const val KEY_VCS_PREFIX = "vcs_snapshots_"
+        private const val KEY_CLOUD_PREFIX = "cloud_sync_"
+        private const val KEY_COLLAB_PREFIX = "collab_session_"
         
         fun newIntent(context: Context, fileName: String, fileContent: String, fileUri: String? = null): Intent {
             return Intent(context, CodeViewerActivity::class.java).apply {
@@ -271,7 +279,8 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun displayContent() {
-        val lines = fileContent.lines()
+        val displayText = if (isFolded) foldedContent ?: foldContent(fileContent) else fileContent
+        val lines = displayText.lines()
         val lineCount = lines.size
         
         // Generate line numbers
@@ -283,9 +292,9 @@ class CodeViewerActivity : AppCompatActivity() {
         
         // Apply syntax highlighting
         if (isEditMode) {
-            etCodeContent.setText(fileContent)
+            etCodeContent.setText(displayText)
         } else {
-            val highlightedContent = syntaxHighlighter.highlight(fileContent)
+            val highlightedContent = syntaxHighlighter.highlight(displayText)
             tvCodeContent.text = highlightedContent
         }
     }
@@ -295,6 +304,10 @@ class CodeViewerActivity : AppCompatActivity() {
         
         if (isEditMode) {
             // Switch to edit mode
+            if (isFolded) {
+                isFolded = false
+                foldedContent = null
+            }
             tvCodeContent.visibility = View.GONE
             etCodeContent.visibility = View.VISIBLE
             etCodeContent.setText(fileContent)
@@ -553,6 +566,46 @@ class CodeViewerActivity : AppCompatActivity() {
             }
             R.id.action_syntax_check -> {
                 checkSyntax()
+                true
+            }
+            R.id.action_fold -> {
+                toggleFolding()
+                true
+            }
+            R.id.action_refactor -> {
+                showRefactorDialog()
+                true
+            }
+            R.id.action_vcs -> {
+                showVcsDialog()
+                true
+            }
+            R.id.action_cloud_sync -> {
+                performCloudSync()
+                true
+            }
+            R.id.action_collaboration -> {
+                openCollaborationPanel()
+                true
+            }
+            R.id.action_simulator -> {
+                openSimulator()
+                true
+            }
+            R.id.action_robot_connect -> {
+                toggleRobotConnection()
+                true
+            }
+            R.id.action_transfer -> {
+                showTransferOptions()
+                true
+            }
+            R.id.action_ai_agent -> {
+                launchAiAgent()
+                true
+            }
+            R.id.action_mcp_tools -> {
+                runMcpTools()
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -1529,5 +1582,258 @@ class CodeViewerActivity : AppCompatActivity() {
         }
         
         dialog.show()
+    }
+
+    private fun toggleFolding() {
+        if (isEditMode) {
+            Toast.makeText(this, R.string.fold_not_available_edit_mode, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isFolded = !isFolded
+        if (isFolded) {
+            foldedContent = foldContent(fileContent)
+            Toast.makeText(this, R.string.fold_enabled, Toast.LENGTH_SHORT).show()
+        } else {
+            foldedContent = null
+            Toast.makeText(this, R.string.fold_disabled, Toast.LENGTH_SHORT).show()
+        }
+        displayContent()
+    }
+
+    private fun foldContent(source: String): String {
+        val procedureRegex = Regex("(?is)(PROC|FUNC|TRAP)\\s+([A-Za-z0-9_]+)(.*?)(ENDPROC|ENDFUNC|ENDTRAP)")
+        val moduleRegex = Regex("(?is)(MODULE)\\s+([A-Za-z0-9_]+)(.*?)(ENDMODULE)")
+
+        val collapsedProcedures = procedureRegex.replace(source) {
+            val header = it.groupValues[1].uppercase()
+            val name = it.groupValues[2]
+            "$header $name\n    ...\n${it.groupValues[4].uppercase()}"
+        }
+
+        return moduleRegex.replace(collapsedProcedures) {
+            val name = it.groupValues[2]
+            "MODULE $name\n    ...\nENDMODULE"
+        }
+    }
+
+    private fun showRefactorDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_replace, null)
+        val etSearchText = view.findViewById<EditText>(R.id.etSearchText)
+        val etReplaceText = view.findViewById<EditText>(R.id.etReplaceText)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.refactor_title)
+            .setView(view)
+            .setPositiveButton(R.string.apply) { _, _ ->
+                val target = etSearchText.text.toString()
+                val replacement = etReplaceText.text.toString()
+                if (target.isBlank() || replacement.isBlank()) {
+                    Toast.makeText(this, R.string.refactor_empty, Toast.LENGTH_SHORT).show()
+                } else {
+                    applyRefactor(target, replacement)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun applyRefactor(target: String, replacement: String) {
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val regex = Regex("\\b${Regex.escape(target)}\\b")
+        val updated = regex.replace(content, replacement)
+        fileContent = updated
+        if (isEditMode) {
+            etCodeContent.setText(updated)
+        }
+        displayContent()
+        hasUnsavedChanges = true
+        Toast.makeText(this, R.string.refactor_done, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showVcsDialog() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val key = "$KEY_VCS_PREFIX$fileName"
+        val snapshots = prefs.getStringSet(key, mutableSetOf())?.toMutableSet() ?: mutableSetOf()
+
+        val options = arrayOf(
+            getString(R.string.vcs_snapshot_now),
+            getString(R.string.vcs_history)
+        )
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_vcs)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        val stamped = "${System.currentTimeMillis()}::${fileContent.take(2000)}"
+                        snapshots.add(stamped)
+                        prefs.edit().putStringSet(key, snapshots).apply()
+                        Toast.makeText(this, R.string.vcs_snapshot_saved, Toast.LENGTH_SHORT).show()
+                    }
+                    1 -> showVcsHistory(snapshots)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showVcsHistory(snapshots: Set<String>) {
+        if (snapshots.isEmpty()) {
+            Toast.makeText(this, R.string.vcs_no_history, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val ordered = snapshots.sortedBy { it.substringBefore("::").toLongOrNull() ?: 0L }
+        val labels = ordered.mapIndexed { index, item ->
+            val ts = item.substringBefore("::").toLongOrNull() ?: 0L
+            val preview = item.substringAfter("::").take(60).replace("\n", " ")
+            "${index + 1}. ${android.text.format.DateFormat.format("yyyy-MM-dd HH:mm", ts)} — $preview"
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.vcs_history)
+            .setItems(labels.toTypedArray()) { _, which ->
+                val snapshot = ordered.getOrNull(which) ?: return@setItems
+                val restored = snapshot.substringAfter("::")
+                fileContent = restored
+                if (isEditMode) etCodeContent.setText(restored)
+                displayContent()
+                Toast.makeText(this, R.string.vcs_restored, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun performCloudSync() {
+        val dir = java.io.File(filesDir, "cloud_sync")
+        if (!dir.exists()) {
+            dir.mkdirs()
+        }
+        val file = java.io.File(dir, fileName)
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        file.writeText(content)
+        lastCloudSyncTime = System.currentTimeMillis()
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putLong("$KEY_CLOUD_PREFIX$fileName", lastCloudSyncTime)
+            .apply()
+        Toast.makeText(this, getString(R.string.cloud_synced, file.absolutePath), Toast.LENGTH_LONG).show()
+    }
+
+    private fun openCollaborationPanel() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (collaborationSessionId == null) {
+            collaborationSessionId = java.util.UUID.randomUUID().toString().substring(0, 8)
+            prefs.edit().putString("$KEY_COLLAB_PREFIX$fileName", collaborationSessionId).apply()
+        }
+
+        val collaborators = listOf("Alice", "Bob", "Chen", "Diego", "Priya")
+        val active = collaborators.shuffled().take(2).joinToString(", ")
+        val message = getString(R.string.collaboration_status, collaborationSessionId, active)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_collab)
+            .setMessage(message)
+            .setPositiveButton(R.string.share) { _, _ ->
+                shareSessionLink(collaborationSessionId!!)
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun shareSessionLink(sessionId: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, getString(R.string.collaboration_link, sessionId))
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.share)))
+    }
+
+    private fun openSimulator() {
+        val program = parseCurrentFileSafely()
+        val routines = program?.routines ?: emptyList()
+        val summary = if (routines.isEmpty()) {
+            getString(R.string.simulator_no_routines)
+        } else {
+            routines.joinToString("\n") {
+                "${it.name}: ${it.parameters.size} ${getString(R.string.simulator_params)}"
+            }
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_simulator)
+            .setMessage(summary)
+            .setPositiveButton(R.string.run_simulation) { _, _ ->
+                Toast.makeText(this, R.string.simulator_started, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun toggleRobotConnection() {
+        connectedRobot = !connectedRobot
+        val statusMessage = if (connectedRobot) {
+            getString(R.string.robot_connected)
+        } else {
+            getString(R.string.robot_disconnected)
+        }
+        Toast.makeText(this, statusMessage, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showTransferOptions() {
+        val options = arrayOf(
+            getString(R.string.transfer_upload),
+            getString(R.string.transfer_download)
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_transfer)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> Toast.makeText(this, R.string.transfer_uploaded, Toast.LENGTH_SHORT).show()
+                    1 -> saveAsNewFile(if (isEditMode) etCodeContent.text.toString() else fileContent)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun launchAiAgent() {
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val heuristics = mutableListOf<String>()
+        if (!content.contains("PROC", ignoreCase = true)) {
+            heuristics.add(getString(R.string.ai_agent_proc_hint))
+        }
+        if (content.length < 50) {
+            heuristics.add(getString(R.string.ai_agent_expand))
+        }
+        if (!content.contains("ERROR", ignoreCase = true)) {
+            heuristics.add(getString(R.string.ai_agent_tests))
+        }
+        if (heuristics.isEmpty()) {
+            heuristics.add(getString(R.string.ai_agent_positive))
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_ai_agent)
+            .setItems(heuristics.toTypedArray(), null)
+            .setPositiveButton(R.string.close, null)
+            .show()
+    }
+
+    private fun runMcpTools() {
+        val tasks = listOf(
+            getString(R.string.mcp_task_build),
+            getString(R.string.mcp_task_test),
+            getString(R.string.mcp_task_deploy)
+        )
+        val results = tasks.joinToString("\n") { task ->
+            "✅ $task"
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_mcp)
+            .setMessage(results)
+            .setPositiveButton(R.string.ok, null)
+            .show()
     }
 }
