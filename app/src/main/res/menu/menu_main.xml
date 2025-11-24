@@ -19,4 +19,9 @@
         android:title="@string/open_folder"
         app:showAsAction="never" />
 
+    <item
+        android:id="@+id/action_feature_hub"
+        android:title="@string/feature_hub_title"
+        app:showAsAction="never" />
+
 </menu>

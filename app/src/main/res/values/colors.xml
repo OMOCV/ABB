@@ -52,4 +52,9 @@
     <color name="code_highlight_line_dark">#4A4A00</color>     <!-- Yellow-tinted dark for line highlight -->
     <color name="code_highlight_error_dark">#6A3030</color>    <!-- Red-tinted dark for error highlight -->
     <color name="code_highlight_search_dark">#4A4A00</color>   <!-- Yellow-tinted dark for search results -->
+
+    <!-- Feature hub statuses -->
+    <color name="featureStatusAvailable">#C8E6C9</color>
+    <color name="featureStatusInProgress">#FFE0B2</color>
+    <color name="featureStatusPlanned">#E0E0E0</color>
 </resources>

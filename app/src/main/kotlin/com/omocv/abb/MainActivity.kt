@@ -95,6 +95,10 @@ class MainActivity : AppCompatActivity() {
                 openFolderBrowser()
                 true
             }
+            R.id.action_feature_hub -> {
+                startActivity(Intent(this, FeatureHubActivity::class.java))
+                true
+            }
             else -> super.onOptionsItemSelected(item)
         }
     }
