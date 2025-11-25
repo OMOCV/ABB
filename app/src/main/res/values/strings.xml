@@ -103,6 +103,8 @@
     <string name="cloud_provider_webdav">WebDAV</string>
     <string name="cloud_provider_google">Google 账号</string>
     <string name="cloud_webdav_endpoint">WebDAV 地址（如 https://example.com/backup/file.mod）</string>
+    <string name="cloud_webdav_auth_failed">WebDAV 认证失败，请检查用户名/密码或访问权限。</string>
+    <string name="cloud_webdav_payment_required">WebDAV 服务器返回 402，可能需要开通存储配额或检查账户状态。</string>
     <string name="cloud_webdav_username">用户名</string>
     <string name="cloud_webdav_password">密码</string>
     <string name="cloud_google_email">Google 邮箱</string>

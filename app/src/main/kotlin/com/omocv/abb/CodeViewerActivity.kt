@@ -47,6 +47,7 @@ import com.google.android.gms.common.api.Scope
 import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 
 /**
  * Full-screen code viewer with line numbers and advanced features
@@ -103,6 +104,11 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private val googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) {
+            Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
         try {
             val account = task.getResult(ApiException::class.java)
@@ -1771,9 +1777,8 @@ class CodeViewerActivity : AppCompatActivity() {
         if (!::googleSignInClient.isInitialized) {
             initGoogleSignIn()
         }
-        googleSignInClient.signOut().addOnCompleteListener {
-            googleSignInLauncher.launch(googleSignInClient.signInIntent)
-        }
+        // Launch sign-in directly so we preserve existing sessions and speed up callbacks
+        googleSignInLauncher.launch(googleSignInClient.signInIntent)
     }
 
     private fun showCloudSyncDialog() {
@@ -1938,18 +1943,30 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun uploadViaWebDav(request: CloudSyncRequest, content: String): CloudSyncResult {
-        val endpoint = request.endpoint ?: return CloudSyncResult(false, "WebDAV", getString(R.string.cloud_webdav_endpoint))
+        val endpoint = request.endpoint?.trim()
+            ?.ifEmpty { null }
+            ?: return CloudSyncResult(false, "WebDAV", getString(R.string.cloud_webdav_endpoint))
+
+        val targetUrl = buildString {
+            append(endpoint)
+            if (endpoint.endsWith("/")) {
+                append(URLEncoder.encode(fileName, Charsets.UTF_8.name()))
+            }
+        }
+
         return try {
-            val url = URL(endpoint)
+            val url = URL(targetUrl)
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "PUT"
-                connectTimeout = 8000
-                readTimeout = 8000
+                connectTimeout = 12000
+                readTimeout = 12000
+                doInput = true
                 doOutput = true
+                setRequestProperty("User-Agent", "ABB/CloudSync")
                 setRequestProperty("Content-Type", "text/plain; charset=utf-8")
                 if (!request.username.isNullOrBlank()) {
                     val auth = "${request.username}:${request.password ?: ""}"
-                    val encoded = Base64.encodeToString(auth.toByteArray(), Base64.NO_WRAP)
+                    val encoded = Base64.encodeToString(auth.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
                     setRequestProperty("Authorization", "Basic $encoded")
                 }
             }
@@ -1958,12 +1975,21 @@ class CodeViewerActivity : AppCompatActivity() {
                 stream.write(content.toByteArray(Charsets.UTF_8))
             }
 
-            val success = connection.responseCode in 200..299
+            val responseCode = connection.responseCode
             val target = connection.url.toString()
+            val success = responseCode in 200..299
+            val errorDetail = if (!success) {
+                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
+                when (responseCode) {
+                    HttpURLConnection.HTTP_UNAUTHORIZED -> getString(R.string.cloud_webdav_auth_failed)
+                    402 -> getString(R.string.cloud_webdav_payment_required)
+                    else -> detail ?: "HTTP $responseCode"
+                }
+            } else null
             connection.disconnect()
-            if (success) CloudSyncResult(true, target) else CloudSyncResult(false, target, "HTTP ${connection.responseCode}")
+            if (success) CloudSyncResult(true, target) else CloudSyncResult(false, target, errorDetail)
         } catch (e: Exception) {
-            CloudSyncResult(false, endpoint, e.localizedMessage ?: e.message ?: "WebDAV error")
+            CloudSyncResult(false, targetUrl, e.localizedMessage ?: e.message ?: "WebDAV error")
         }
     }
 
