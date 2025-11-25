@@ -112,10 +112,15 @@ class CodeViewerActivity : AppCompatActivity() {
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
         try {
             val account = task.getResult(ApiException::class.java)
-            handleGoogleAccount(account)
-            pendingGoogleRequest?.let {
-                pendingGoogleRequest = null
-                startCloudBackup(it)
+            if (!GoogleSignIn.hasPermissions(account, Scope(GOOGLE_DRIVE_SCOPE))) {
+                pendingGoogleRequest = pendingGoogleRequest ?: CloudSyncRequest(provider = CloudProvider.GOOGLE, email = account.email)
+                requestGoogleDriveConsent(account)
+            } else {
+                handleGoogleAccount(account)
+                pendingGoogleRequest?.let {
+                    pendingGoogleRequest = null
+                    startCloudBackup(it)
+                }
             }
         } catch (e: ApiException) {
             val message = when (e.statusCode) {
@@ -152,7 +157,8 @@ class CodeViewerActivity : AppCompatActivity() {
         private const val KEY_CLOUD_PREFIX = "cloud_sync_"
         private const val KEY_COLLAB_PREFIX = "collab_session_"
         private const val GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
-        
+        private const val GOOGLE_PERMISSIONS_REQUEST = 9001
+
         fun newIntent(context: Context, fileName: String, fileContent: String, fileUri: String? = null): Intent {
             return Intent(context, CodeViewerActivity::class.java).apply {
                 putExtra(EXTRA_FILE_NAME, fileName)
@@ -216,6 +222,32 @@ class CodeViewerActivity : AppCompatActivity() {
                 Toast.LENGTH_LONG
             ).show()
             // Don't finish - allow user to see what's displayed
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == GOOGLE_PERMISSIONS_REQUEST) {
+            if (resultCode != RESULT_OK) {
+                Toast.makeText(this, R.string.cloud_google_signin_cancelled, Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                handleGoogleAccount(account)
+                pendingGoogleRequest?.let {
+                    pendingGoogleRequest = null
+                    startCloudBackup(it)
+                }
+            } catch (e: ApiException) {
+                Toast.makeText(
+                    this,
+                    getString(R.string.cloud_sync_failed, e.localizedMessage ?: e.message ?: "Sign-in failed"),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
     }
 
@@ -1789,7 +1821,7 @@ class CodeViewerActivity : AppCompatActivity() {
 
         if (forceInteractive) {
             // Clear any cached session so the user always sees the account/consent sheet
-            googleSignInClient.signOut().addOnCompleteListener { startFlow() }
+            googleSignInClient.revokeAccess().addOnCompleteListener { startFlow() }
         } else {
             startFlow()
         }
@@ -1916,6 +1948,18 @@ class CodeViewerActivity : AppCompatActivity() {
         Toast.makeText(this, getString(R.string.cloud_google_signed_in, account.email), Toast.LENGTH_SHORT).show()
     }
 
+    private fun requestGoogleDriveConsent(account: GoogleSignInAccount) {
+        if (!::googleSignInClient.isInitialized) {
+            initGoogleSignIn()
+        }
+        GoogleSignIn.requestPermissions(
+            this,
+            GOOGLE_PERMISSIONS_REQUEST,
+            account,
+            Scope(GOOGLE_DRIVE_SCOPE)
+        )
+    }
+
     private fun startCloudBackup(request: CloudSyncRequest) {
         val content = if (isEditMode) etCodeContent.text.toString() else fileContent
         val progressMessage = if (request.provider == CloudProvider.GOOGLE) {
@@ -1962,10 +2006,7 @@ class CodeViewerActivity : AppCompatActivity() {
             ?: return CloudSyncResult(false, "WebDAV", getString(R.string.cloud_webdav_endpoint))
 
         val targetUrl = buildWebDavTarget(endpoint)
-        val ensurePath = ensureWebDavPath(targetUrl, request)
-        if (ensurePath != null) {
-            return ensurePath
-        }
+        ensureWebDavPath(targetUrl, request)?.let { return it }
 
         return try {
             val url = URL(targetUrl)
@@ -2024,23 +2065,31 @@ class CodeViewerActivity : AppCompatActivity() {
             val dirPath = path.substring(0, lastSlash)
             if (dirPath.isBlank() || dirPath == "/") return null
 
-            val dirUrl = URL(url.protocol, url.host, url.port, dirPath)
-            val connection = (dirUrl.openConnection() as HttpURLConnection).apply {
-                requestMethod = "MKCOL"
-                connectTimeout = 12000
-                readTimeout = 12000
-                doInput = true
-                setRequestProperty("User-Agent", "ABB/CloudSync")
-                applyBasicAuth(request)
-            }
+            val segments = dirPath.split('/').filter { it.isNotBlank() }
+            var cumulativePath = ""
+            for (segment in segments) {
+                cumulativePath += "/$segment"
+                val dirUrl = URL(url.protocol, url.host, url.port, cumulativePath)
+                val connection = (dirUrl.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "MKCOL"
+                    connectTimeout = 12000
+                    readTimeout = 12000
+                    doInput = true
+                    setRequestProperty("User-Agent", "ABB/CloudSync")
+                    applyBasicAuth(request)
+                }
 
-            val responseCode = connection.responseCode
-            connection.disconnect()
-            return when (responseCode) {
-                201, 200, 204, HttpURLConnection.HTTP_CONFLICT, HttpURLConnection.HTTP_BAD_METHOD -> null
-                HttpURLConnection.HTTP_UNAUTHORIZED -> CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_auth_failed))
-                else -> CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_missing_path))
+                val responseCode = connection.responseCode
+                connection.disconnect()
+                when (responseCode) {
+                    201, 200, 204, HttpURLConnection.HTTP_CONFLICT, HttpURLConnection.HTTP_BAD_METHOD -> {
+                        // Created successfully or already exists/unsupported (which implies it exists)
+                    }
+                    HttpURLConnection.HTTP_UNAUTHORIZED -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_auth_failed))
+                    else -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_missing_path))
+                }
             }
+            null
         } catch (e: Exception) {
             null
         }
@@ -2058,7 +2107,15 @@ class CodeViewerActivity : AppCompatActivity() {
         val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
         val email = account?.email ?: request.email ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
         if (account == null) {
+            pendingGoogleRequest = request
+            runOnUiThread { launchGoogleSignIn(forceInteractive = true) }
             return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+        }
+
+        if (!GoogleSignIn.hasPermissions(account, Scope(GOOGLE_DRIVE_SCOPE))) {
+            pendingGoogleRequest = request
+            runOnUiThread { requestGoogleDriveConsent(account) }
+            return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_consent_required))
         }
 
         val androidAccount = account.account ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
