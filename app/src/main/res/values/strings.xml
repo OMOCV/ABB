@@ -105,6 +105,7 @@
     <string name="cloud_webdav_endpoint">WebDAV 地址（如 https://example.com/backup/file.mod）</string>
     <string name="cloud_webdav_auth_failed">WebDAV 认证失败，请检查用户名/密码或访问权限。</string>
     <string name="cloud_webdav_payment_required">WebDAV 服务器返回 402，可能需要开通存储配额或检查账户状态。</string>
+    <string name="cloud_webdav_missing_path">WebDAV 路径不存在，请确认目录已创建或填写完整的备份路径。</string>
     <string name="cloud_webdav_username">用户名</string>
     <string name="cloud_webdav_password">密码</string>
     <string name="cloud_google_email">Google 邮箱</string>
@@ -113,6 +114,8 @@
     <string name="cloud_google_not_signed_in">尚未登录 Google，将在浏览器中完成授权。</string>
     <string name="cloud_google_signed_in">已登录：%1$s</string>
     <string name="cloud_google_signin_required">请先使用 Google 登录后再进行备份。</string>
+    <string name="cloud_google_signin_cancelled">已取消登录，请重新选择账号完成授权。</string>
+    <string name="cloud_google_signin_unconfigured">Google 登录配置异常，请检查签名或客户端 ID 设置后重试。</string>
     <string name="cloud_google_consent_required">需要为 Drive 授权，请允许权限后重试。</string>
     <string name="cloud_google_uploading">正在将文件上传到 Google Drive…</string>
     <string name="cloud_sync_ready">网络正常，正在准备上传 %1$s …</string>

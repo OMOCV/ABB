@@ -118,7 +118,12 @@ class CodeViewerActivity : AppCompatActivity() {
                 startCloudBackup(it)
             }
         } catch (e: ApiException) {
-            Toast.makeText(this, getString(R.string.cloud_sync_failed, e.localizedMessage ?: e.message ?: "Sign-in failed"), Toast.LENGTH_LONG).show()
+            val message = when (e.statusCode) {
+                com.google.android.gms.common.api.CommonStatusCodes.CANCELED -> getString(R.string.cloud_google_signin_cancelled)
+                12500 /* DEVELOPER_ERROR */ -> getString(R.string.cloud_google_signin_unconfigured)
+                else -> e.localizedMessage ?: e.message ?: "Sign-in failed"
+            }
+            Toast.makeText(this, getString(R.string.cloud_sync_failed, message), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -1773,12 +1778,21 @@ class CodeViewerActivity : AppCompatActivity() {
         showCloudSyncDialog()
     }
 
-    private fun launchGoogleSignIn() {
+    private fun launchGoogleSignIn(forceInteractive: Boolean = false) {
         if (!::googleSignInClient.isInitialized) {
             initGoogleSignIn()
         }
-        // Launch sign-in directly so we preserve existing sessions and speed up callbacks
-        googleSignInLauncher.launch(googleSignInClient.signInIntent)
+
+        val startFlow: () -> Unit = {
+            googleSignInLauncher.launch(googleSignInClient.signInIntent)
+        }
+
+        if (forceInteractive) {
+            // Clear any cached session so the user always sees the account/consent sheet
+            googleSignInClient.signOut().addOnCompleteListener { startFlow() }
+        } else {
+            startFlow()
+        }
     }
 
     private fun showCloudSyncDialog() {
@@ -1815,7 +1829,7 @@ class CodeViewerActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
             pendingGoogleRequest = null
-            launchGoogleSignIn()
+            launchGoogleSignIn(forceInteractive = true)
         }
 
         val dialog = MaterialAlertDialogBuilder(this)
@@ -1854,7 +1868,7 @@ class CodeViewerActivity : AppCompatActivity() {
                         if (googleAccount == null) {
                             Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
                             pendingGoogleRequest = CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
-                            launchGoogleSignIn()
+                            launchGoogleSignIn(forceInteractive = true)
                             return@setOnClickListener
                         }
                         CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
@@ -1947,11 +1961,10 @@ class CodeViewerActivity : AppCompatActivity() {
             ?.ifEmpty { null }
             ?: return CloudSyncResult(false, "WebDAV", getString(R.string.cloud_webdav_endpoint))
 
-        val targetUrl = buildString {
-            append(endpoint)
-            if (endpoint.endsWith("/")) {
-                append(URLEncoder.encode(fileName, Charsets.UTF_8.name()))
-            }
+        val targetUrl = buildWebDavTarget(endpoint)
+        val ensurePath = ensureWebDavPath(targetUrl, request)
+        if (ensurePath != null) {
+            return ensurePath
         }
 
         return try {
@@ -1964,11 +1977,7 @@ class CodeViewerActivity : AppCompatActivity() {
                 doOutput = true
                 setRequestProperty("User-Agent", "ABB/CloudSync")
                 setRequestProperty("Content-Type", "text/plain; charset=utf-8")
-                if (!request.username.isNullOrBlank()) {
-                    val auth = "${request.username}:${request.password ?: ""}"
-                    val encoded = Base64.encodeToString(auth.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-                    setRequestProperty("Authorization", "Basic $encoded")
-                }
+                applyBasicAuth(request)
             }
 
             connection.outputStream.use { stream ->
@@ -1982,6 +1991,7 @@ class CodeViewerActivity : AppCompatActivity() {
                 val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
                 when (responseCode) {
                     HttpURLConnection.HTTP_UNAUTHORIZED -> getString(R.string.cloud_webdav_auth_failed)
+                    HttpURLConnection.HTTP_NOT_FOUND -> getString(R.string.cloud_webdav_missing_path)
                     402 -> getString(R.string.cloud_webdav_payment_required)
                     else -> detail ?: "HTTP $responseCode"
                 }
@@ -1990,6 +2000,57 @@ class CodeViewerActivity : AppCompatActivity() {
             if (success) CloudSyncResult(true, target) else CloudSyncResult(false, target, errorDetail)
         } catch (e: Exception) {
             CloudSyncResult(false, targetUrl, e.localizedMessage ?: e.message ?: "WebDAV error")
+        }
+    }
+
+    private fun buildWebDavTarget(endpoint: String): String {
+        val encodedName = URLEncoder.encode(fileName, Charsets.UTF_8.name())
+        val lastSegment = endpoint.substringAfterLast('/')
+        val alreadyHasFile = lastSegment.equals(fileName, ignoreCase = true) || lastSegment.equals(encodedName, ignoreCase = true)
+        return when {
+            endpoint.endsWith("/") -> endpoint + encodedName
+            alreadyHasFile -> endpoint
+            lastSegment.contains('.') -> endpoint
+            else -> "$endpoint/$encodedName"
+        }
+    }
+
+    private fun ensureWebDavPath(targetUrl: String, request: CloudSyncRequest): CloudSyncResult? {
+        return try {
+            val url = URL(targetUrl)
+            val path = url.path ?: return null
+            val lastSlash = path.lastIndexOf('/')
+            if (lastSlash <= 0) return null
+            val dirPath = path.substring(0, lastSlash)
+            if (dirPath.isBlank() || dirPath == "/") return null
+
+            val dirUrl = URL(url.protocol, url.host, url.port, dirPath)
+            val connection = (dirUrl.openConnection() as HttpURLConnection).apply {
+                requestMethod = "MKCOL"
+                connectTimeout = 12000
+                readTimeout = 12000
+                doInput = true
+                setRequestProperty("User-Agent", "ABB/CloudSync")
+                applyBasicAuth(request)
+            }
+
+            val responseCode = connection.responseCode
+            connection.disconnect()
+            return when (responseCode) {
+                201, 200, 204, HttpURLConnection.HTTP_CONFLICT, HttpURLConnection.HTTP_BAD_METHOD -> null
+                HttpURLConnection.HTTP_UNAUTHORIZED -> CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_auth_failed))
+                else -> CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_missing_path))
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun HttpURLConnection.applyBasicAuth(request: CloudSyncRequest) {
+        if (!request.username.isNullOrBlank()) {
+            val auth = "${request.username}:${request.password ?: ""}"
+            val encoded = Base64.encodeToString(auth.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+            setRequestProperty("Authorization", "Basic $encoded")
         }
     }
 
