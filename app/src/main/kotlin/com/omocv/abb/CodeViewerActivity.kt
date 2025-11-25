@@ -105,6 +105,7 @@ class CodeViewerActivity : AppCompatActivity() {
 
     private val googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) {
+            googleAccount = null
             Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
@@ -1821,7 +1822,7 @@ class CodeViewerActivity : AppCompatActivity() {
 
         if (forceInteractive) {
             // Clear any cached session so the user always sees the account/consent sheet
-            googleSignInClient.revokeAccess().addOnCompleteListener { startFlow() }
+            googleSignInClient.signOut().addOnCompleteListener { startFlow() }
         } else {
             startFlow()
         }
@@ -2080,18 +2081,21 @@ class CodeViewerActivity : AppCompatActivity() {
                 }
 
                 val responseCode = connection.responseCode
+                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
                 connection.disconnect()
                 when (responseCode) {
                     201, 200, 204, HttpURLConnection.HTTP_CONFLICT, HttpURLConnection.HTTP_BAD_METHOD -> {
                         // Created successfully or already exists/unsupported (which implies it exists)
                     }
                     HttpURLConnection.HTTP_UNAUTHORIZED -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_auth_failed))
-                    else -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_missing_path))
+                    HttpURLConnection.HTTP_NOT_FOUND -> return CloudSyncResult(false, targetUrl, detail ?: getString(R.string.cloud_webdav_missing_path))
+                    402 -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_payment_required))
+                    else -> return CloudSyncResult(false, targetUrl, detail ?: getString(R.string.cloud_webdav_missing_path))
                 }
             }
             null
         } catch (e: Exception) {
-            null
+            CloudSyncResult(false, targetUrl, e.localizedMessage ?: e.message ?: getString(R.string.cloud_webdav_missing_path))
         }
     }
 
