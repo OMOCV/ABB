@@ -90,34 +90,19 @@
             android:paddingTop="16dp"
             android:visibility="gone">
 
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="@string/cloud_google_email">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etOAuthEmail"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="textEmailAddress"
-                    android:enabled="false"
-                    android:singleLine="true" />
-            </com.google.android.material.textfield.TextInputLayout>
-
             <TextView
                 android:id="@+id/tvOAuthStatus"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:paddingTop="8dp"
                 android:text="@string/cloud_google_not_signed_in"
-                android:textAppearance="?attr/textAppearanceBodySmall" />
+                android:textAppearance="?attr/textAppearanceBodyMedium"
+                android:paddingBottom="12dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnOAuthSignIn"
                 style="@style/Widget.Material3.Button.TonalButton"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="12dp"
                 android:text="@string/cloud_google_sign_in" />
         </LinearLayout>
 

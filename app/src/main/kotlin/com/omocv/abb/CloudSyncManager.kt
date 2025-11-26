@@ -108,6 +108,45 @@ class CloudSyncManager(private val context: Context) {
     }
 
     /**
+     * Test WebDAV connection without uploading a file
+     */
+    suspend fun testWebDavConnection(config: WebDavConfig): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        try {
+            val url = URL(config.url)
+            val connection = url.openConnection() as HttpURLConnection
+            connection.requestMethod = "OPTIONS"
+            connection.connectTimeout = CONNECTION_TIMEOUT
+            connection.readTimeout = READ_TIMEOUT
+
+            if (config.username.isNotBlank()) {
+                val auth = "${config.username}:${config.password}"
+                val encoded = Base64.encodeToString(auth.toByteArray(), Base64.NO_WRAP)
+                connection.setRequestProperty("Authorization", "Basic $encoded")
+            }
+
+            val responseCode = connection.responseCode
+            connection.disconnect()
+
+            when (responseCode) {
+                200, 204 -> Pair(true, "连接成功")
+                401 -> Pair(false, "认证失败：用户名或密码错误")
+                403 -> Pair(false, "权限被拒绝")
+                404 -> Pair(false, "路径不存在")
+                else -> Pair(false, "服务器返回错误: HTTP $responseCode")
+            }
+        } catch (e: java.net.UnknownHostException) {
+            Pair(false, "无法解析服务器地址")
+        } catch (e: java.net.ConnectException) {
+            Pair(false, "无法连接到服务器")
+        } catch (e: java.net.SocketTimeoutException) {
+            Pair(false, "连接超时")
+        } catch (e: Exception) {
+            Log.e(TAG, "WebDAV connection test failed", e)
+            Pair(false, e.message ?: "未知错误")
+        }
+    }
+
+    /**
      * Sync file to Google Drive with retry mechanism
      */
     suspend fun syncToGoogleDrive(
@@ -169,6 +208,12 @@ class CloudSyncManager(private val context: Context) {
     // ========================= WebDAV Helper Functions =========================
 
     private fun normalizeWebDavUrl(baseUrl: String, fileName: String): String {
+        // If the URL ends with a file extension, treat it as a complete URL
+        if (baseUrl.matches(Regex(".*\\.[a-zA-Z0-9]{2,4}$"))) {
+            return baseUrl.trim()
+        }
+
+        // Otherwise, append the filename
         val cleanUrl = baseUrl.trimEnd('/')
         val encodedFileName = URLEncoder.encode(fileName, "UTF-8")
         return "$cleanUrl/$encodedFileName"

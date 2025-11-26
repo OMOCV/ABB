@@ -105,18 +105,20 @@ class CodeViewerActivity : AppCompatActivity() {
 
     private val googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode != RESULT_OK) {
-            googleAccount = null
-            Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.cloud_google_signin_cancelled, Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
 
         val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
         try {
             val account = task.getResult(ApiException::class.java)
+            // Save account first, even if Drive permission not granted yet
+            handleGoogleAccount(account)
+
+            // Then check and request Drive permission if needed
             if (!GoogleSignIn.hasPermissions(account, Scope(GOOGLE_DRIVE_SCOPE))) {
+                Toast.makeText(this, "需要授予 Google Drive 权限才能同步文件", Toast.LENGTH_LONG).show()
                 requestGoogleDriveConsent(account)
-            } else {
-                handleGoogleAccount(account)
             }
         } catch (e: ApiException) {
             val message = when (e.statusCode) {
@@ -124,7 +126,7 @@ class CodeViewerActivity : AppCompatActivity() {
                 12500 /* DEVELOPER_ERROR */ -> getString(R.string.cloud_google_signin_unconfigured)
                 else -> e.localizedMessage ?: e.message ?: "Sign-in failed"
             }
-            Toast.makeText(this, "Google Sign-In failed: $message", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Google 登录失败: $message", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -220,7 +222,7 @@ class CodeViewerActivity : AppCompatActivity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == GOOGLE_PERMISSIONS_REQUEST) {
             if (resultCode != RESULT_OK) {
-                Toast.makeText(this, R.string.cloud_google_signin_cancelled, Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Drive 权限请求已取消，同步功能需要此权限", Toast.LENGTH_SHORT).show()
                 return
             }
 
@@ -228,10 +230,11 @@ class CodeViewerActivity : AppCompatActivity() {
             try {
                 val account = task.getResult(ApiException::class.java)
                 handleGoogleAccount(account)
+                Toast.makeText(this, "Google Drive 权限已授予", Toast.LENGTH_SHORT).show()
             } catch (e: ApiException) {
                 Toast.makeText(
                     this,
-                    "Google Sign-In failed: ${e.localizedMessage ?: e.message ?: "Sign-in failed"}",
+                    "权限授予失败: ${e.localizedMessage ?: e.message}",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -1830,7 +1833,6 @@ class CodeViewerActivity : AppCompatActivity() {
         val etWebDavPassword = view.findViewById<TextInputEditText>(R.id.etWebDavPassword)
 
         // OAuth fields
-        val etOAuthEmail = view.findViewById<TextInputEditText>(R.id.etOAuthEmail)
         val tvOAuthStatus = view.findViewById<TextView>(R.id.tvOAuthStatus)
         val btnOAuthSignIn = view.findViewById<MaterialButton>(R.id.btnOAuthSignIn)
 
@@ -1882,7 +1884,7 @@ class CodeViewerActivity : AppCompatActivity() {
                 }
                 CloudProvider.AuthType.OAUTH -> {
                     containerOAuth.visibility = View.VISIBLE
-                    refreshOAuthUi(provider, tvOAuthStatus, etOAuthEmail, btnOAuthSignIn)
+                    refreshOAuthUi(provider, tvOAuthStatus, btnOAuthSignIn)
                 }
                 CloudProvider.AuthType.TOKEN -> {
                     containerToken.visibility = View.VISIBLE
@@ -1975,17 +1977,19 @@ class CodeViewerActivity : AppCompatActivity() {
                     }
 
                     CloudProvider.GOOGLE_DRIVE -> {
-                        val email = googleAccount?.email ?: etOAuthEmail.text?.toString()?.trim().orEmpty()
+                        val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
 
-                        if (googleAccount == null) {
+                        if (account == null) {
                             Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
                             launchGoogleSignIn(forceInteractive = true)
                             return@setOnClickListener
                         }
 
+                        googleAccount = account
+
                         prefs.edit().apply {
                             putString("${KEY_CLOUD_PREFIX}provider", selectedProvider.name)
-                            putString("${KEY_CLOUD_PREFIX}google_email", email)
+                            putString("${KEY_CLOUD_PREFIX}google_email", account.email)
                         }.apply()
 
                         dialog.dismiss()
@@ -2002,24 +2006,21 @@ class CodeViewerActivity : AppCompatActivity() {
         dialog.show()
     }
 
-    private fun refreshOAuthUi(provider: CloudProvider, statusView: TextView, emailField: TextInputEditText, actionButton: MaterialButton) {
+    private fun refreshOAuthUi(provider: CloudProvider, statusView: TextView, actionButton: MaterialButton) {
         when (provider) {
             CloudProvider.GOOGLE_DRIVE -> {
                 val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
                 googleAccount = account
                 if (account != null) {
                     statusView.text = getString(R.string.cloud_google_signed_in, account.email)
-                    emailField.setText(account.email)
                     actionButton.text = getString(R.string.cloud_google_switch)
                 } else {
                     statusView.text = getString(R.string.cloud_google_not_signed_in)
-                    emailField.setText("")
                     actionButton.text = getString(R.string.cloud_google_sign_in)
                 }
             }
             else -> {
                 statusView.text = "请使用 ${getString(provider.displayNameRes)} 登录"
-                emailField.setText("")
                 actionButton.text = "登录"
             }
         }
@@ -2039,13 +2040,7 @@ class CodeViewerActivity : AppCompatActivity() {
 
                     // Test connection with CloudSyncManager
                     val config = CloudSyncManager.WebDavConfig(url, username, password)
-                    val result = cloudSyncManager.syncToWebDav(config, "test.txt", "test") {}
-
-                    when (result) {
-                        is CloudSyncManager.SyncResult.Success -> Pair(true, "连接成功")
-                        is CloudSyncManager.SyncResult.Failure -> Pair(false, result.error)
-                        else -> Pair(false, "未知错误")
-                    }
+                    cloudSyncManager.testWebDavConnection(config)
                 }
 
                 CloudProvider.GOOGLE_DRIVE -> {
