@@ -2011,35 +2011,50 @@ class CodeViewerActivity : AppCompatActivity() {
 
         return try {
             val url = URL(targetUrl)
+            val contentBytes = content.toByteArray(Charsets.UTF_8)
             val connection = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "PUT"
-                connectTimeout = 12000
-                readTimeout = 12000
-                doInput = true
+                connectTimeout = 15000
+                readTimeout = 15000
                 doOutput = true
                 setRequestProperty("User-Agent", "ABB/CloudSync")
                 setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+                setRequestProperty("Content-Length", contentBytes.size.toString())
                 applyBasicAuth(request)
             }
 
             connection.outputStream.use { stream ->
-                stream.write(content.toByteArray(Charsets.UTF_8))
+                stream.write(contentBytes)
+                stream.flush()
             }
 
             val responseCode = connection.responseCode
             val target = connection.url.toString()
             val success = responseCode in 200..299
             val errorDetail = if (!success) {
-                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
+                val detail = try {
+                    connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
+                } catch (e: Exception) {
+                    null
+                }
                 when (responseCode) {
                     HttpURLConnection.HTTP_UNAUTHORIZED -> getString(R.string.cloud_webdav_auth_failed)
                     HttpURLConnection.HTTP_NOT_FOUND -> getString(R.string.cloud_webdav_missing_path)
+                    HttpURLConnection.HTTP_FORBIDDEN -> "Access forbidden: ${detail ?: "Permission denied"}"
                     402 -> getString(R.string.cloud_webdav_payment_required)
+                    HttpURLConnection.HTTP_CONFLICT -> "Conflict: ${detail ?: "Resource conflict"}"
+                    507 -> "Insufficient storage: ${detail ?: "Quota exceeded"}"
                     else -> detail ?: "HTTP $responseCode"
                 }
             } else null
             connection.disconnect()
             if (success) CloudSyncResult(true, target) else CloudSyncResult(false, target, errorDetail)
+        } catch (e: java.net.SocketTimeoutException) {
+            CloudSyncResult(false, targetUrl, "Connection timeout: ${e.localizedMessage ?: "Server not responding"}")
+        } catch (e: java.net.UnknownHostException) {
+            CloudSyncResult(false, targetUrl, "Unknown host: ${e.localizedMessage ?: "Cannot resolve server address"}")
+        } catch (e: javax.net.ssl.SSLException) {
+            CloudSyncResult(false, targetUrl, "SSL error: ${e.localizedMessage ?: "Certificate validation failed"}")
         } catch (e: Exception) {
             CloudSyncResult(false, targetUrl, e.localizedMessage ?: e.message ?: "WebDAV error")
         }
@@ -2126,8 +2141,19 @@ class CodeViewerActivity : AppCompatActivity() {
 
         return try {
             val token = GoogleAuthUtil.getToken(applicationContext, androidAccount, "oauth2:$GOOGLE_DRIVE_SCOPE")
+
+            // Search for existing file with the same name
+            val existingFileId = searchGoogleDriveFile(token, fileName)
+
             val boundary = "gcx-${System.currentTimeMillis()}"
-            val meta = "{" + "\"name\":\"$fileName\",\"mimeType\":\"text/plain\"" + "}"
+            val meta = if (existingFileId != null) {
+                // Update existing file - no need to specify name again
+                "{\"mimeType\":\"text/plain\"}"
+            } else {
+                // Create new file
+                "{\"name\":\"$fileName\",\"mimeType\":\"text/plain\"}"
+            }
+
             val payload = buildString {
                 append("--$boundary\r\n")
                 append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
@@ -2138,11 +2164,19 @@ class CodeViewerActivity : AppCompatActivity() {
                 append("\r\n--$boundary--")
             }
 
-            val url = URL("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart")
+            val uploadUrl = if (existingFileId != null) {
+                // Update existing file
+                "https://www.googleapis.com/upload/drive/v3/files/$existingFileId?uploadType=multipart"
+            } else {
+                // Create new file
+                "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
+            }
+
+            val url = URL(uploadUrl)
             val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 12000
-                readTimeout = 12000
+                requestMethod = if (existingFileId != null) "PATCH" else "POST"
+                connectTimeout = 15000
+                readTimeout = 15000
                 doOutput = true
                 setRequestProperty("Authorization", "Bearer $token")
                 setRequestProperty("Content-Type", "multipart/related; boundary=$boundary")
@@ -2150,15 +2184,31 @@ class CodeViewerActivity : AppCompatActivity() {
 
             connection.outputStream.use { stream ->
                 stream.write(payload.toByteArray(Charsets.UTF_8))
+                stream.flush()
             }
 
-            val success = connection.responseCode in 200..299
+            val responseCode = connection.responseCode
+            val success = responseCode in 200..299
             val target = "Google Drive ($email)"
+
+            val errorDetail = if (!success) {
+                try {
+                    val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
+                    errorResponse?.takeIf { it.isNotBlank() }?.let { response ->
+                        // Try to extract error message from JSON response
+                        val errorMsg = response.substringAfter("\"message\":\"", "").substringBefore("\"", "")
+                        if (errorMsg.isNotBlank()) errorMsg else response
+                    } ?: "HTTP $responseCode"
+                } catch (e: Exception) {
+                    "HTTP $responseCode"
+                }
+            } else null
+
             connection.disconnect()
             if (success) {
                 CloudSyncResult(true, target)
             } else {
-                CloudSyncResult(false, target, "HTTP ${connection.responseCode}")
+                CloudSyncResult(false, target, errorDetail)
             }
         } catch (e: UserRecoverableAuthException) {
             pendingGoogleRequest = request
@@ -2167,8 +2217,46 @@ class CodeViewerActivity : AppCompatActivity() {
                 googleAuthRecoveryLauncher.launch(e.intent)
             }
             CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_consent_required))
+        } catch (e: java.net.SocketTimeoutException) {
+            CloudSyncResult(false, "Google Drive", "Connection timeout: ${e.localizedMessage ?: "Server not responding"}")
+        } catch (e: java.net.UnknownHostException) {
+            CloudSyncResult(false, "Google Drive", "Network error: ${e.localizedMessage ?: "Cannot connect to Google Drive"}")
+        } catch (e: javax.net.ssl.SSLException) {
+            CloudSyncResult(false, "Google Drive", "SSL error: ${e.localizedMessage ?: "Secure connection failed"}")
         } catch (e: Exception) {
             CloudSyncResult(false, "Google Drive", e.localizedMessage ?: e.message ?: "Google backup error")
+        }
+    }
+
+    private fun searchGoogleDriveFile(token: String, fileName: String): String? {
+        return try {
+            val encodedQuery = URLEncoder.encode("name='$fileName' and trashed=false", Charsets.UTF_8.name())
+            val searchUrl = URL("https://www.googleapis.com/drive/v3/files?q=$encodedQuery&fields=files(id,name)&pageSize=1")
+            val connection = (searchUrl.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 10000
+                readTimeout = 10000
+                setRequestProperty("Authorization", "Bearer $token")
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode in 200..299) {
+                val response = connection.inputStream?.bufferedReader()?.use { it.readText() }
+                connection.disconnect()
+
+                // Simple JSON parsing to extract file ID
+                response?.let {
+                    val idPattern = "\"id\"\\s*:\\s*\"([^\"]+)\"".toRegex()
+                    val match = idPattern.find(it)
+                    match?.groupValues?.getOrNull(1)
+                }
+            } else {
+                connection.disconnect()
+                null
+            }
+        } catch (e: Exception) {
+            // If search fails, return null to create new file
+            null
         }
     }
 
