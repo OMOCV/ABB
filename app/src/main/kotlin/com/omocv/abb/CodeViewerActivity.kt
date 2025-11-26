@@ -21,6 +21,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.color.MaterialColors
@@ -1964,7 +1966,7 @@ class CodeViewerActivity : AppCompatActivity() {
         syncProgressDialog = createSyncProgressDialog("Preparing WebDAV sync...")
         syncProgressDialog?.show()
 
-        androidx.lifecycle.lifecycleScope.launch {
+        lifecycleScope.launch {
             val result = cloudSyncManager.syncToWebDav(config, fileName, content) { progress ->
                 runOnUiThread {
                     updateSyncProgress(progress.message)
@@ -1996,7 +1998,7 @@ class CodeViewerActivity : AppCompatActivity() {
         syncProgressDialog = createSyncProgressDialog("Preparing Google Drive sync...")
         syncProgressDialog?.show()
 
-        androidx.lifecycle.lifecycleScope.launch {
+        lifecycleScope.launch {
             val result = cloudSyncManager.syncToGoogleDrive(config, fileName, content) { progress ->
                 runOnUiThread {
                     updateSyncProgress(progress.message)
