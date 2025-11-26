@@ -1845,7 +1845,6 @@ class CodeViewerActivity : AppCompatActivity() {
                 Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            pendingGoogleRequest = null
             launchGoogleSignIn(forceInteractive = true)
         }
 

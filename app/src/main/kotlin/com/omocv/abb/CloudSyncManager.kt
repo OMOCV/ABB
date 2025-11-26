@@ -301,7 +301,8 @@ class CloudSyncManager(private val context: Context) {
 
     private fun getGoogleAuthToken(account: GoogleSignInAccount): String? {
         return try {
-            GoogleAuthUtil.getToken(context, account.account, "oauth2:$GOOGLE_DRIVE_SCOPE")
+            val androidAccount = account.account ?: return null
+            GoogleAuthUtil.getToken(context, androidAccount, "oauth2:$GOOGLE_DRIVE_SCOPE")
         } catch (e: Exception) {
             Log.e(TAG, "Error getting Google auth token", e)
             null
