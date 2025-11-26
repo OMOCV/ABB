@@ -77,7 +77,11 @@ dependencies {
     implementation("com.google.android.gms:play-services-auth:21.1.1")
     implementation("com.google.api-client:google-api-client-android:1.33.0")
     implementation("com.google.http-client:google-http-client-gson:1.43.3")
-    
+
+    // Kotlin Coroutines for async operations
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")

@@ -87,8 +87,6 @@ class CodeViewerActivity : AppCompatActivity() {
     private var lastCloudSyncTime: Long = 0L
     private lateinit var googleSignInClient: GoogleSignInClient
     private var googleAccount: GoogleSignInAccount? = null
-    private var pendingGoogleRequest: CloudSyncRequest? = null
-    
     // File save launcher for save-as functionality
     private val saveFileLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
@@ -114,14 +112,9 @@ class CodeViewerActivity : AppCompatActivity() {
         try {
             val account = task.getResult(ApiException::class.java)
             if (!GoogleSignIn.hasPermissions(account, Scope(GOOGLE_DRIVE_SCOPE))) {
-                pendingGoogleRequest = pendingGoogleRequest ?: CloudSyncRequest(provider = CloudProvider.GOOGLE, email = account.email)
                 requestGoogleDriveConsent(account)
             } else {
                 handleGoogleAccount(account)
-                pendingGoogleRequest?.let {
-                    pendingGoogleRequest = null
-                    startCloudBackup(it)
-                }
             }
         } catch (e: ApiException) {
             val message = when (e.statusCode) {
@@ -129,17 +122,12 @@ class CodeViewerActivity : AppCompatActivity() {
                 12500 /* DEVELOPER_ERROR */ -> getString(R.string.cloud_google_signin_unconfigured)
                 else -> e.localizedMessage ?: e.message ?: "Sign-in failed"
             }
-            Toast.makeText(this, getString(R.string.cloud_sync_failed, message), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Google Sign-In failed: $message", Toast.LENGTH_LONG).show()
         }
     }
 
     private val googleAuthRecoveryLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            pendingGoogleRequest?.let {
-                pendingGoogleRequest = null
-                startCloudBackup(it)
-            }
-        } else {
+        if (result.resultCode != RESULT_OK) {
             Toast.makeText(this, R.string.cloud_google_consent_required, Toast.LENGTH_SHORT).show()
         }
     }
@@ -238,14 +226,10 @@ class CodeViewerActivity : AppCompatActivity() {
             try {
                 val account = task.getResult(ApiException::class.java)
                 handleGoogleAccount(account)
-                pendingGoogleRequest?.let {
-                    pendingGoogleRequest = null
-                    startCloudBackup(it)
-                }
             } catch (e: ApiException) {
                 Toast.makeText(
                     this,
-                    getString(R.string.cloud_sync_failed, e.localizedMessage ?: e.message ?: "Sign-in failed"),
+                    "Google Sign-In failed: ${e.localizedMessage ?: e.message ?: "Sign-in failed"}",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -1874,54 +1858,48 @@ class CodeViewerActivity : AppCompatActivity() {
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val provider = if (providerGroup.checkedRadioButtonId == R.id.providerGoogle) {
-                    CloudProvider.GOOGLE
+                val isWebDav = providerGroup.checkedRadioButtonId == R.id.providerWebDav
+
+                if (isWebDav) {
+                    // WebDAV sync
+                    val url = etWebDavUrl.text?.toString()?.trim().orEmpty()
+                    val username = etWebDavUser.text?.toString()?.trim().orEmpty()
+                    val password = etWebDavPassword.text?.toString()?.trim().orEmpty()
+
+                    if (url.isBlank()) {
+                        etWebDavUrl.error = getString(R.string.cloud_webdav_endpoint)
+                        return@setOnClickListener
+                    }
+
+                    // Save preferences
+                    prefs.edit().apply {
+                        putString("${KEY_CLOUD_PREFIX}provider", "WEBDAV")
+                        putString("${KEY_CLOUD_PREFIX}webdav_url", url)
+                        putString("${KEY_CLOUD_PREFIX}webdav_user", username)
+                    }.apply()
+
+                    dialog.dismiss()
+                    startCloudBackup(isWebDav = true, url = url, username = username, password = password)
+
                 } else {
-                    CloudProvider.WEBDAV
-                }
+                    // Google Drive sync
+                    val email = googleAccount?.email ?: etGoogleEmail.text?.toString()?.trim().orEmpty()
 
-                val request = when (provider) {
-                    CloudProvider.WEBDAV -> {
-                        val url = etWebDavUrl.text?.toString()?.trim().orEmpty()
-                        val username = etWebDavUser.text?.toString()?.trim().orEmpty()
-                        val password = etWebDavPassword.text?.toString()?.trim().orEmpty()
-                        if (url.isBlank()) {
-                            etWebDavUrl.error = getString(R.string.cloud_webdav_endpoint)
-                            return@setOnClickListener
-                        }
-                        CloudSyncRequest(
-                            provider = CloudProvider.WEBDAV,
-                            endpoint = url,
-                            username = username,
-                            password = password
-                        )
+                    if (googleAccount == null) {
+                        Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
+                        launchGoogleSignIn(forceInteractive = true)
+                        return@setOnClickListener
                     }
-                    CloudProvider.GOOGLE -> {
-                        val email = googleAccount?.email ?: etGoogleEmail.text?.toString()?.trim().orEmpty()
-                        if (googleAccount == null) {
-                            Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
-                            pendingGoogleRequest = CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
-                            launchGoogleSignIn(forceInteractive = true)
-                            return@setOnClickListener
-                        }
-                        CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
-                    }
+
+                    // Save preferences
+                    prefs.edit().apply {
+                        putString("${KEY_CLOUD_PREFIX}provider", "GOOGLE")
+                        putString("${KEY_CLOUD_PREFIX}google_email", email)
+                    }.apply()
+
+                    dialog.dismiss()
+                    startCloudBackup(isWebDav = false)
                 }
-
-                if (!isNetworkAvailable()) {
-                    Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-
-                prefs.edit().apply {
-                    putString("${KEY_CLOUD_PREFIX}provider", provider.name)
-                    putString("${KEY_CLOUD_PREFIX}webdav_url", request.endpoint)
-                    putString("${KEY_CLOUD_PREFIX}webdav_user", request.username)
-                    putString("${KEY_CLOUD_PREFIX}google_email", request.email)
-                }.apply()
-
-                startCloudBackup(request)
-                dialog.dismiss()
             }
         }
 
@@ -1961,313 +1939,125 @@ class CodeViewerActivity : AppCompatActivity() {
         )
     }
 
-    private fun startCloudBackup(request: CloudSyncRequest) {
-        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val progressMessage = if (request.provider == CloudProvider.GOOGLE) {
-            getString(R.string.cloud_google_uploading)
-        } else {
-            getString(R.string.cloud_sync_ready, fileName)
-        }
-        val progress = showSyncProgressDialog(progressMessage)
+    // ===== NEW CLOUD SYNC IMPLEMENTATION USING CloudSyncManager =====
 
-        Thread {
-            val result = when (request.provider) {
-                CloudProvider.WEBDAV -> uploadViaWebDav(request, content)
-                CloudProvider.GOOGLE -> backupToGoogleDrive(request, content)
+    private val cloudSyncManager by lazy { CloudSyncManager(applicationContext) }
+    private var syncProgressDialog: AlertDialog? = null
+
+    private fun startCloudBackup(isWebDav: Boolean, url: String = "", username: String = "", password: String = "") {
+        if (!isNetworkAvailable()) {
+            Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+
+        if (isWebDav) {
+            startWebDavSync(url, username, password, content)
+        } else {
+            startGoogleDriveSync(content)
+        }
+    }
+
+    private fun startWebDavSync(url: String, username: String, password: String, content: String) {
+        val config = CloudSyncManager.WebDavConfig(url, username, password)
+
+        syncProgressDialog = createSyncProgressDialog("Preparing WebDAV sync...")
+        syncProgressDialog?.show()
+
+        androidx.lifecycle.lifecycleScope.launch {
+            val result = cloudSyncManager.syncToWebDav(config, fileName, content) { progress ->
+                runOnUiThread {
+                    updateSyncProgress(progress.message)
+                }
             }
 
             runOnUiThread {
-                progress.dismiss()
-                if (result.success) {
-                    lastCloudSyncTime = System.currentTimeMillis()
-                    val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                    prefs.edit()
-                        .putLong("$KEY_CLOUD_PREFIX$fileName", lastCloudSyncTime)
-                        .putString("${KEY_CLOUD_PREFIX}last_target", result.target)
-                        .apply()
-                    Toast.makeText(
-                        this,
-                        getString(R.string.cloud_sync_success_detail, fileName, result.target),
-                        Toast.LENGTH_LONG
-                    ).show()
-                } else {
-                    Toast.makeText(
-                        this,
-                        getString(R.string.cloud_sync_failed, result.error ?: getString(R.string.unknown_error)),
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                syncProgressDialog?.dismiss()
+                handleSyncResult(result)
             }
-        }.start()
-    }
-
-    private fun uploadViaWebDav(request: CloudSyncRequest, content: String): CloudSyncResult {
-        val endpoint = request.endpoint?.trim()
-            ?.ifEmpty { null }
-            ?: return CloudSyncResult(false, "WebDAV", getString(R.string.cloud_webdav_endpoint))
-
-        val targetUrl = buildWebDavTarget(endpoint)
-        ensureWebDavPath(targetUrl, request)?.let { return it }
-
-        return try {
-            val url = URL(targetUrl)
-            val contentBytes = content.toByteArray(Charsets.UTF_8)
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "PUT"
-                connectTimeout = 15000
-                readTimeout = 15000
-                doOutput = true
-                setRequestProperty("User-Agent", "ABB/CloudSync")
-                setRequestProperty("Content-Type", "text/plain; charset=utf-8")
-                setRequestProperty("Content-Length", contentBytes.size.toString())
-                applyBasicAuth(request)
-            }
-
-            connection.outputStream.use { stream ->
-                stream.write(contentBytes)
-                stream.flush()
-            }
-
-            val responseCode = connection.responseCode
-            val target = connection.url.toString()
-            val success = responseCode in 200..299
-            val errorDetail = if (!success) {
-                val detail = try {
-                    connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
-                } catch (e: Exception) {
-                    null
-                }
-                when (responseCode) {
-                    HttpURLConnection.HTTP_UNAUTHORIZED -> getString(R.string.cloud_webdav_auth_failed)
-                    HttpURLConnection.HTTP_NOT_FOUND -> getString(R.string.cloud_webdav_missing_path)
-                    HttpURLConnection.HTTP_FORBIDDEN -> "Access forbidden: ${detail ?: "Permission denied"}"
-                    402 -> getString(R.string.cloud_webdav_payment_required)
-                    HttpURLConnection.HTTP_CONFLICT -> "Conflict: ${detail ?: "Resource conflict"}"
-                    507 -> "Insufficient storage: ${detail ?: "Quota exceeded"}"
-                    else -> detail ?: "HTTP $responseCode"
-                }
-            } else null
-            connection.disconnect()
-            if (success) CloudSyncResult(true, target) else CloudSyncResult(false, target, errorDetail)
-        } catch (e: java.net.SocketTimeoutException) {
-            CloudSyncResult(false, targetUrl, "Connection timeout: ${e.localizedMessage ?: "Server not responding"}")
-        } catch (e: java.net.UnknownHostException) {
-            CloudSyncResult(false, targetUrl, "Unknown host: ${e.localizedMessage ?: "Cannot resolve server address"}")
-        } catch (e: javax.net.ssl.SSLException) {
-            CloudSyncResult(false, targetUrl, "SSL error: ${e.localizedMessage ?: "Certificate validation failed"}")
-        } catch (e: Exception) {
-            CloudSyncResult(false, targetUrl, e.localizedMessage ?: e.message ?: "WebDAV error")
         }
     }
 
-    private fun buildWebDavTarget(endpoint: String): String {
-        val encodedName = URLEncoder.encode(fileName, Charsets.UTF_8.name())
-        val lastSegment = endpoint.substringAfterLast('/')
-        val alreadyHasFile = lastSegment.equals(fileName, ignoreCase = true) || lastSegment.equals(encodedName, ignoreCase = true)
-        return when {
-            endpoint.endsWith("/") -> endpoint + encodedName
-            alreadyHasFile -> endpoint
-            lastSegment.contains('.') -> endpoint
-            else -> "$endpoint/$encodedName"
-        }
-    }
-
-    private fun ensureWebDavPath(targetUrl: String, request: CloudSyncRequest): CloudSyncResult? {
-        return try {
-            val url = URL(targetUrl)
-            val path = url.path ?: return null
-            val lastSlash = path.lastIndexOf('/')
-            if (lastSlash <= 0) return null
-            val dirPath = path.substring(0, lastSlash)
-            if (dirPath.isBlank() || dirPath == "/") return null
-
-            val segments = dirPath.split('/').filter { it.isNotBlank() }
-            var cumulativePath = ""
-            for (segment in segments) {
-                cumulativePath += "/$segment"
-                val dirUrl = URL(url.protocol, url.host, url.port, cumulativePath)
-                val connection = (dirUrl.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "MKCOL"
-                    connectTimeout = 12000
-                    readTimeout = 12000
-                    doInput = true
-                    setRequestProperty("User-Agent", "ABB/CloudSync")
-                    applyBasicAuth(request)
-                }
-
-                val responseCode = connection.responseCode
-                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
-                connection.disconnect()
-                when (responseCode) {
-                    201, 200, 204, HttpURLConnection.HTTP_CONFLICT, HttpURLConnection.HTTP_BAD_METHOD -> {
-                        // Created successfully or already exists/unsupported (which implies it exists)
-                    }
-                    HttpURLConnection.HTTP_UNAUTHORIZED -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_auth_failed))
-                    HttpURLConnection.HTTP_NOT_FOUND -> return CloudSyncResult(false, targetUrl, detail ?: getString(R.string.cloud_webdav_missing_path))
-                    402 -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_payment_required))
-                    else -> return CloudSyncResult(false, targetUrl, detail ?: getString(R.string.cloud_webdav_missing_path))
-                }
-            }
-            null
-        } catch (e: Exception) {
-            CloudSyncResult(false, targetUrl, e.localizedMessage ?: e.message ?: getString(R.string.cloud_webdav_missing_path))
-        }
-    }
-
-    private fun HttpURLConnection.applyBasicAuth(request: CloudSyncRequest) {
-        if (!request.username.isNullOrBlank()) {
-            val auth = "${request.username}:${request.password ?: ""}"
-            val encoded = Base64.encodeToString(auth.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-            setRequestProperty("Authorization", "Basic $encoded")
-        }
-    }
-
-    private fun backupToGoogleDrive(request: CloudSyncRequest, content: String): CloudSyncResult {
+    private fun startGoogleDriveSync(content: String) {
         val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
-        val email = account?.email ?: request.email ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
         if (account == null) {
-            pendingGoogleRequest = request
-            runOnUiThread { launchGoogleSignIn(forceInteractive = true) }
-            return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+            Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
+            launchGoogleSignIn(forceInteractive = true)
+            return
         }
 
         if (!GoogleSignIn.hasPermissions(account, Scope(GOOGLE_DRIVE_SCOPE))) {
-            pendingGoogleRequest = request
-            runOnUiThread { requestGoogleDriveConsent(account) }
-            return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_consent_required))
+            requestGoogleDriveConsent(account)
+            return
         }
 
-        val androidAccount = account.account ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+        val config = CloudSyncManager.GoogleDriveConfig(account)
 
-        return try {
-            val token = GoogleAuthUtil.getToken(applicationContext, androidAccount, "oauth2:$GOOGLE_DRIVE_SCOPE")
+        syncProgressDialog = createSyncProgressDialog("Preparing Google Drive sync...")
+        syncProgressDialog?.show()
 
-            // Search for existing file with the same name
-            val existingFileId = searchGoogleDriveFile(token, fileName)
-
-            val boundary = "gcx-${System.currentTimeMillis()}"
-            val meta = if (existingFileId != null) {
-                // Update existing file - no need to specify name again
-                "{\"mimeType\":\"text/plain\"}"
-            } else {
-                // Create new file
-                "{\"name\":\"$fileName\",\"mimeType\":\"text/plain\"}"
-            }
-
-            val payload = buildString {
-                append("--$boundary\r\n")
-                append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
-                append(meta)
-                append("\r\n--$boundary\r\n")
-                append("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
-                append(content)
-                append("\r\n--$boundary--")
-            }
-
-            val uploadUrl = if (existingFileId != null) {
-                // Update existing file
-                "https://www.googleapis.com/upload/drive/v3/files/$existingFileId?uploadType=multipart"
-            } else {
-                // Create new file
-                "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart"
-            }
-
-            val url = URL(uploadUrl)
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = if (existingFileId != null) "PATCH" else "POST"
-                connectTimeout = 15000
-                readTimeout = 15000
-                doOutput = true
-                setRequestProperty("Authorization", "Bearer $token")
-                setRequestProperty("Content-Type", "multipart/related; boundary=$boundary")
-            }
-
-            connection.outputStream.use { stream ->
-                stream.write(payload.toByteArray(Charsets.UTF_8))
-                stream.flush()
-            }
-
-            val responseCode = connection.responseCode
-            val success = responseCode in 200..299
-            val target = "Google Drive ($email)"
-
-            val errorDetail = if (!success) {
-                try {
-                    val errorResponse = connection.errorStream?.bufferedReader()?.use { it.readText() }
-                    errorResponse?.takeIf { it.isNotBlank() }?.let { response ->
-                        // Try to extract error message from JSON response
-                        val errorMsg = response.substringAfter("\"message\":\"", "").substringBefore("\"", "")
-                        if (errorMsg.isNotBlank()) errorMsg else response
-                    } ?: "HTTP $responseCode"
-                } catch (e: Exception) {
-                    "HTTP $responseCode"
+        androidx.lifecycle.lifecycleScope.launch {
+            val result = cloudSyncManager.syncToGoogleDrive(config, fileName, content) { progress ->
+                runOnUiThread {
+                    updateSyncProgress(progress.message)
                 }
-            } else null
-
-            connection.disconnect()
-            if (success) {
-                CloudSyncResult(true, target)
-            } else {
-                CloudSyncResult(false, target, errorDetail)
             }
-        } catch (e: UserRecoverableAuthException) {
-            pendingGoogleRequest = request
+
             runOnUiThread {
-                Toast.makeText(this, R.string.cloud_google_consent_required, Toast.LENGTH_SHORT).show()
-                googleAuthRecoveryLauncher.launch(e.intent)
+                syncProgressDialog?.dismiss()
+                handleSyncResult(result)
             }
-            CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_consent_required))
-        } catch (e: java.net.SocketTimeoutException) {
-            CloudSyncResult(false, "Google Drive", "Connection timeout: ${e.localizedMessage ?: "Server not responding"}")
-        } catch (e: java.net.UnknownHostException) {
-            CloudSyncResult(false, "Google Drive", "Network error: ${e.localizedMessage ?: "Cannot connect to Google Drive"}")
-        } catch (e: javax.net.ssl.SSLException) {
-            CloudSyncResult(false, "Google Drive", "SSL error: ${e.localizedMessage ?: "Secure connection failed"}")
-        } catch (e: Exception) {
-            CloudSyncResult(false, "Google Drive", e.localizedMessage ?: e.message ?: "Google backup error")
         }
     }
 
-    private fun searchGoogleDriveFile(token: String, fileName: String): String? {
-        return try {
-            val encodedQuery = URLEncoder.encode("name='$fileName' and trashed=false", Charsets.UTF_8.name())
-            val searchUrl = URL("https://www.googleapis.com/drive/v3/files?q=$encodedQuery&fields=files(id,name)&pageSize=1")
-            val connection = (searchUrl.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 10000
-                readTimeout = 10000
-                setRequestProperty("Authorization", "Bearer $token")
+    private fun handleSyncResult(result: CloudSyncManager.SyncResult) {
+        when (result) {
+            is CloudSyncManager.SyncResult.Success -> {
+                lastCloudSyncTime = System.currentTimeMillis()
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putLong("$KEY_CLOUD_PREFIX$fileName", lastCloudSyncTime)
+                    .putString("${KEY_CLOUD_PREFIX}last_target", result.provider)
+                    .apply()
+
+                Toast.makeText(
+                    this,
+                    "${result.provider}: ${result.message}",
+                    Toast.LENGTH_LONG
+                ).show()
             }
+            is CloudSyncManager.SyncResult.Failure -> {
+                val errorMsg = "${result.provider}: ${result.error}"
+                Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
 
-            val responseCode = connection.responseCode
-            if (responseCode in 200..299) {
-                val response = connection.inputStream?.bufferedReader()?.use { it.readText() }
-                connection.disconnect()
-
-                // Simple JSON parsing to extract file ID
-                response?.let {
-                    val idPattern = "\"id\"\\s*:\\s*\"([^\"]+)\"".toRegex()
-                    val match = idPattern.find(it)
-                    match?.groupValues?.getOrNull(1)
+                // Show retry option for retryable errors
+                if (result.retryable) {
+                    MaterialAlertDialogBuilder(this)
+                        .setTitle("Sync Failed")
+                        .setMessage("$errorMsg\n\nWould you like to retry?")
+                        .setPositiveButton("Retry") { _, _ ->
+                            performCloudSync()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
                 }
-            } else {
-                connection.disconnect()
-                null
             }
-        } catch (e: Exception) {
-            // If search fails, return null to create new file
-            null
+            else -> {}
         }
     }
 
-    private fun showSyncProgressDialog(message: String): AlertDialog {
+    private fun createSyncProgressDialog(message: String): AlertDialog {
         val view = layoutInflater.inflate(R.layout.dialog_sync_progress, null)
         view.findViewById<TextView>(R.id.progressMessage)?.text = message
         return MaterialAlertDialogBuilder(this)
             .setView(view)
             .setCancelable(false)
             .create()
-            .also { it.show() }
+    }
+
+    private fun updateSyncProgress(message: String) {
+        syncProgressDialog?.findViewById<TextView>(R.id.progressMessage)?.text = message
     }
 
     private fun isNetworkAvailable(): Boolean {
@@ -2276,22 +2066,6 @@ class CodeViewerActivity : AppCompatActivity() {
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
-
-    private data class CloudSyncRequest(
-        val provider: CloudProvider,
-        val endpoint: String? = null,
-        val username: String? = null,
-        val password: String? = null,
-        val email: String? = null
-    )
-
-    private data class CloudSyncResult(
-        val success: Boolean,
-        val target: String,
-        val error: String? = null
-    )
-
-    private enum class CloudProvider { WEBDAV, GOOGLE }
 
     private fun openCollaborationPanel() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
