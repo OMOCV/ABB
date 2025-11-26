@@ -58,6 +58,12 @@ android {
     buildFeatures {
         viewBinding = true
     }
+
+    packagingOptions {
+        resources {
+            excludes += setOf("META-INF/DEPENDENCIES", "META-INF/INDEX.LIST")
+        }
+    }
 }
 
 dependencies {
@@ -68,6 +74,9 @@ dependencies {
     implementation("androidx.activity:activity-ktx:1.8.2")
     implementation("androidx.fragment:fragment-ktx:1.6.2")
     implementation("androidx.recyclerview:recyclerview:1.3.2")
+    implementation("com.google.android.gms:play-services-auth:21.1.1")
+    implementation("com.google.api-client:google-api-client-android:1.33.0")
+    implementation("com.google.http-client:google-http-client-gson:1.43.3")
     
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")

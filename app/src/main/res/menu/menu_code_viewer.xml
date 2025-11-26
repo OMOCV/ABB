@@ -49,6 +49,56 @@
         app:showAsAction="never" />
 
     <item
+        android:id="@+id/action_fold"
+        android:title="@string/feature_fold"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_refactor"
+        android:title="@string/feature_refactor"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_vcs"
+        android:title="@string/feature_vcs"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_cloud_sync"
+        android:title="@string/feature_cloud_sync"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_collaboration"
+        android:title="@string/feature_collab"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_simulator"
+        android:title="@string/feature_simulator"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_robot_connect"
+        android:title="@string/feature_robot_connect"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_transfer"
+        android:title="@string/feature_transfer"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_ai_agent"
+        android:title="@string/feature_ai_agent"
+        app:showAsAction="never" />
+
+    <item
+        android:id="@+id/action_mcp_tools"
+        android:title="@string/feature_mcp"
+        app:showAsAction="never" />
+
+    <item
         android:id="@+id/action_toggle_theme"
         android:title="@string/toggle_theme"
         app:showAsAction="never" />

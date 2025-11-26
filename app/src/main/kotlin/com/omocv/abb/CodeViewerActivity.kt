@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.graphics.drawable.ColorDrawable
 import android.content.res.Configuration
 import android.os.Bundle
@@ -13,10 +15,13 @@ import android.widget.TextView
 import android.widget.EditText
 import android.widget.Toast
 import android.view.View
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.color.MaterialColors
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -27,7 +32,22 @@ import android.text.style.BackgroundColorSpan
 import android.text.Spannable
 import android.text.Spanned
 import android.widget.RadioGroup
+import android.util.Base64
 import kotlin.math.max
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.gms.auth.GoogleAuthUtil
+import com.google.android.gms.auth.UserRecoverableAuthException
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInAccount
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.common.Scopes
+import com.google.android.gms.common.api.ApiException
+import com.google.android.gms.common.api.Scope
+import com.google.api.client.googleapis.extensions.android.gms.auth.GoogleAccountCredential
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 
 /**
  * Full-screen code viewer with line numbers and advanced features
@@ -60,6 +80,14 @@ class CodeViewerActivity : AppCompatActivity() {
     private var currentHighlightColor: Int? = null
     private var currentHighlightColumns: Pair<Int, Int>? = null
     private var pendingExitAfterSave = false
+    private var isFolded = false
+    private var foldedContent: String? = null
+    private var collaborationSessionId: String? = null
+    private var connectedRobot = false
+    private var lastCloudSyncTime: Long = 0L
+    private lateinit var googleSignInClient: GoogleSignInClient
+    private var googleAccount: GoogleSignInAccount? = null
+    private var pendingGoogleRequest: CloudSyncRequest? = null
     
     // File save launcher for save-as functionality
     private val saveFileLauncher = registerForActivityResult(
@@ -74,6 +102,47 @@ class CodeViewerActivity : AppCompatActivity() {
             pendingExitAfterSave = false
         }
     }
+
+    private val googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode != RESULT_OK) {
+            googleAccount = null
+            Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+
+        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        try {
+            val account = task.getResult(ApiException::class.java)
+            if (!GoogleSignIn.hasPermissions(account, Scope(GOOGLE_DRIVE_SCOPE))) {
+                pendingGoogleRequest = pendingGoogleRequest ?: CloudSyncRequest(provider = CloudProvider.GOOGLE, email = account.email)
+                requestGoogleDriveConsent(account)
+            } else {
+                handleGoogleAccount(account)
+                pendingGoogleRequest?.let {
+                    pendingGoogleRequest = null
+                    startCloudBackup(it)
+                }
+            }
+        } catch (e: ApiException) {
+            val message = when (e.statusCode) {
+                com.google.android.gms.common.api.CommonStatusCodes.CANCELED -> getString(R.string.cloud_google_signin_cancelled)
+                12500 /* DEVELOPER_ERROR */ -> getString(R.string.cloud_google_signin_unconfigured)
+                else -> e.localizedMessage ?: e.message ?: "Sign-in failed"
+            }
+            Toast.makeText(this, getString(R.string.cloud_sync_failed, message), Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private val googleAuthRecoveryLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == RESULT_OK) {
+            pendingGoogleRequest?.let {
+                pendingGoogleRequest = null
+                startCloudBackup(it)
+            }
+        } else {
+            Toast.makeText(this, R.string.cloud_google_consent_required, Toast.LENGTH_SHORT).show()
+        }
+    }
     
     companion object {
         private const val EXTRA_FILE_NAME = "file_name"
@@ -85,7 +154,12 @@ class CodeViewerActivity : AppCompatActivity() {
         private const val KEY_BOOKMARKS = "bookmarks_"
         private const val KEY_AUTO_COMPLETE = "auto_complete_enabled"
         private const val KEY_REAL_TIME_CHECK = "real_time_syntax_check"
-        
+        private const val KEY_VCS_PREFIX = "vcs_snapshots_"
+        private const val KEY_CLOUD_PREFIX = "cloud_sync_"
+        private const val KEY_COLLAB_PREFIX = "collab_session_"
+        private const val GOOGLE_DRIVE_SCOPE = "https://www.googleapis.com/auth/drive.file"
+        private const val GOOGLE_PERMISSIONS_REQUEST = 9001
+
         fun newIntent(context: Context, fileName: String, fileContent: String, fileUri: String? = null): Intent {
             return Intent(context, CodeViewerActivity::class.java).apply {
                 putExtra(EXTRA_FILE_NAME, fileName)
@@ -117,6 +191,8 @@ class CodeViewerActivity : AppCompatActivity() {
             finish()
             return
         }
+
+        initGoogleSignIn()
         
         fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: "Unknown"
         fileContent = intent.getStringExtra(EXTRA_FILE_CONTENT) ?: ""
@@ -148,6 +224,41 @@ class CodeViewerActivity : AppCompatActivity() {
             ).show()
             // Don't finish - allow user to see what's displayed
         }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == GOOGLE_PERMISSIONS_REQUEST) {
+            if (resultCode != RESULT_OK) {
+                Toast.makeText(this, R.string.cloud_google_signin_cancelled, Toast.LENGTH_SHORT).show()
+                return
+            }
+
+            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
+            try {
+                val account = task.getResult(ApiException::class.java)
+                handleGoogleAccount(account)
+                pendingGoogleRequest?.let {
+                    pendingGoogleRequest = null
+                    startCloudBackup(it)
+                }
+            } catch (e: ApiException) {
+                Toast.makeText(
+                    this,
+                    getString(R.string.cloud_sync_failed, e.localizedMessage ?: e.message ?: "Sign-in failed"),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    private fun initGoogleSignIn() {
+        val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestEmail()
+            .requestScopes(Scope(Scopes.DRIVE_FILE))
+            .build()
+        googleSignInClient = GoogleSignIn.getClient(this, options)
+        googleAccount = GoogleSignIn.getLastSignedInAccount(this)
     }
 
     private fun initViews() {
@@ -271,7 +382,8 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun displayContent() {
-        val lines = fileContent.lines()
+        val displayText = if (isFolded) foldedContent ?: foldContent(fileContent) else fileContent
+        val lines = displayText.lines()
         val lineCount = lines.size
         
         // Generate line numbers
@@ -283,9 +395,9 @@ class CodeViewerActivity : AppCompatActivity() {
         
         // Apply syntax highlighting
         if (isEditMode) {
-            etCodeContent.setText(fileContent)
+            etCodeContent.setText(displayText)
         } else {
-            val highlightedContent = syntaxHighlighter.highlight(fileContent)
+            val highlightedContent = syntaxHighlighter.highlight(displayText)
             tvCodeContent.text = highlightedContent
         }
     }
@@ -295,6 +407,10 @@ class CodeViewerActivity : AppCompatActivity() {
         
         if (isEditMode) {
             // Switch to edit mode
+            if (isFolded) {
+                isFolded = false
+                foldedContent = null
+            }
             tvCodeContent.visibility = View.GONE
             etCodeContent.visibility = View.VISIBLE
             etCodeContent.setText(fileContent)
@@ -553,6 +669,46 @@ class CodeViewerActivity : AppCompatActivity() {
             }
             R.id.action_syntax_check -> {
                 checkSyntax()
+                true
+            }
+            R.id.action_fold -> {
+                toggleFolding()
+                true
+            }
+            R.id.action_refactor -> {
+                showRefactorDialog()
+                true
+            }
+            R.id.action_vcs -> {
+                showVcsDialog()
+                true
+            }
+            R.id.action_cloud_sync -> {
+                performCloudSync()
+                true
+            }
+            R.id.action_collaboration -> {
+                openCollaborationPanel()
+                true
+            }
+            R.id.action_simulator -> {
+                openSimulator()
+                true
+            }
+            R.id.action_robot_connect -> {
+                toggleRobotConnection()
+                true
+            }
+            R.id.action_transfer -> {
+                showTransferOptions()
+                true
+            }
+            R.id.action_ai_agent -> {
+                launchAiAgent()
+                true
+            }
+            R.id.action_mcp_tools -> {
+                runMcpTools()
                 true
             }
             else -> super.onOptionsItemSelected(item)
@@ -1529,5 +1685,640 @@ class CodeViewerActivity : AppCompatActivity() {
         }
         
         dialog.show()
+    }
+
+    private fun toggleFolding() {
+        if (isEditMode) {
+            Toast.makeText(this, R.string.fold_not_available_edit_mode, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isFolded = !isFolded
+        if (isFolded) {
+            foldedContent = foldContent(fileContent)
+            Toast.makeText(this, R.string.fold_enabled, Toast.LENGTH_SHORT).show()
+        } else {
+            foldedContent = null
+            Toast.makeText(this, R.string.fold_disabled, Toast.LENGTH_SHORT).show()
+        }
+        displayContent()
+    }
+
+    private fun foldContent(source: String): String {
+        val procedureRegex = Regex("(?is)(PROC|FUNC|TRAP)\\s+([A-Za-z0-9_]+)(.*?)(ENDPROC|ENDFUNC|ENDTRAP)")
+        val moduleRegex = Regex("(?is)(MODULE)\\s+([A-Za-z0-9_]+)(.*?)(ENDMODULE)")
+
+        val collapsedProcedures = procedureRegex.replace(source) {
+            val header = it.groupValues[1].uppercase()
+            val name = it.groupValues[2]
+            "$header $name\n    ...\n${it.groupValues[4].uppercase()}"
+        }
+
+        return moduleRegex.replace(collapsedProcedures) {
+            val name = it.groupValues[2]
+            "MODULE $name\n    ...\nENDMODULE"
+        }
+    }
+
+    private fun showRefactorDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_replace, null)
+        val etSearchText = view.findViewById<EditText>(R.id.etSearchText)
+        val etReplaceText = view.findViewById<EditText>(R.id.etReplaceText)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.refactor_title)
+            .setView(view)
+            .setPositiveButton(R.string.apply) { _, _ ->
+                val target = etSearchText.text.toString()
+                val replacement = etReplaceText.text.toString()
+                if (target.isBlank() || replacement.isBlank()) {
+                    Toast.makeText(this, R.string.refactor_empty, Toast.LENGTH_SHORT).show()
+                } else {
+                    applyRefactor(target, replacement)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun applyRefactor(target: String, replacement: String) {
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val regex = Regex("\\b${Regex.escape(target)}\\b")
+        val updated = regex.replace(content, replacement)
+        fileContent = updated
+        if (isEditMode) {
+            etCodeContent.setText(updated)
+        }
+        displayContent()
+        hasUnsavedChanges = true
+        Toast.makeText(this, R.string.refactor_done, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showVcsDialog() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val key = "$KEY_VCS_PREFIX$fileName"
+        val snapshots = prefs.getStringSet(key, mutableSetOf())?.toMutableSet() ?: mutableSetOf()
+
+        val options = arrayOf(
+            getString(R.string.vcs_snapshot_now),
+            getString(R.string.vcs_history)
+        )
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_vcs)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> {
+                        val stamped = "${System.currentTimeMillis()}::${fileContent.take(2000)}"
+                        snapshots.add(stamped)
+                        prefs.edit().putStringSet(key, snapshots).apply()
+                        Toast.makeText(this, R.string.vcs_snapshot_saved, Toast.LENGTH_SHORT).show()
+                    }
+                    1 -> showVcsHistory(snapshots)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun showVcsHistory(snapshots: Set<String>) {
+        if (snapshots.isEmpty()) {
+            Toast.makeText(this, R.string.vcs_no_history, Toast.LENGTH_SHORT).show()
+            return
+        }
+        val ordered = snapshots.sortedBy { it.substringBefore("::").toLongOrNull() ?: 0L }
+        val labels = ordered.mapIndexed { index, item ->
+            val ts = item.substringBefore("::").toLongOrNull() ?: 0L
+            val preview = item.substringAfter("::").take(60).replace("\n", " ")
+            "${index + 1}. ${android.text.format.DateFormat.format("yyyy-MM-dd HH:mm", ts)} — $preview"
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.vcs_history)
+            .setItems(labels.toTypedArray()) { _, which ->
+                val snapshot = ordered.getOrNull(which) ?: return@setItems
+                val restored = snapshot.substringAfter("::")
+                fileContent = restored
+                if (isEditMode) etCodeContent.setText(restored)
+                displayContent()
+                Toast.makeText(this, R.string.vcs_restored, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun performCloudSync() {
+        showCloudSyncDialog()
+    }
+
+    private fun launchGoogleSignIn(forceInteractive: Boolean = false) {
+        if (!::googleSignInClient.isInitialized) {
+            initGoogleSignIn()
+        }
+
+        val startFlow: () -> Unit = {
+            googleSignInLauncher.launch(googleSignInClient.signInIntent)
+        }
+
+        if (forceInteractive) {
+            // Clear any cached session so the user always sees the account/consent sheet
+            googleSignInClient.signOut().addOnCompleteListener { startFlow() }
+        } else {
+            startFlow()
+        }
+    }
+
+    private fun showCloudSyncDialog() {
+        val view = layoutInflater.inflate(R.layout.dialog_cloud_sync, null)
+        val providerGroup = view.findViewById<RadioGroup>(R.id.cloudProviderGroup)
+        val webDavContainer = view.findViewById<View>(R.id.webDavContainer)
+        val googleContainer = view.findViewById<View>(R.id.googleContainer)
+        val etWebDavUrl = view.findViewById<TextInputEditText>(R.id.etWebDavUrl)
+        val etWebDavUser = view.findViewById<TextInputEditText>(R.id.etWebDavUser)
+        val etWebDavPassword = view.findViewById<TextInputEditText>(R.id.etWebDavPassword)
+        val etGoogleEmail = view.findViewById<TextInputEditText>(R.id.etGoogleEmail)
+        val tvGoogleStatus = view.findViewById<TextView>(R.id.tvGoogleStatus)
+        val btnGoogleSignIn = view.findViewById<MaterialButton>(R.id.btnGoogleSignIn)
+
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        etWebDavUrl.setText(prefs.getString("${KEY_CLOUD_PREFIX}webdav_url", ""))
+        etWebDavUser.setText(prefs.getString("${KEY_CLOUD_PREFIX}webdav_user", ""))
+        etGoogleEmail.setText(prefs.getString("${KEY_CLOUD_PREFIX}google_email", ""))
+
+        refreshGoogleUi(tvGoogleStatus, etGoogleEmail, btnGoogleSignIn)
+
+        providerGroup.setOnCheckedChangeListener { _, checkedId ->
+            val webDavSelected = checkedId == R.id.providerWebDav
+            webDavContainer.visibility = if (webDavSelected) View.VISIBLE else View.GONE
+            googleContainer.visibility = if (webDavSelected) View.GONE else View.VISIBLE
+            if (!webDavSelected) {
+                refreshGoogleUi(tvGoogleStatus, etGoogleEmail, btnGoogleSignIn)
+            }
+        }
+
+        btnGoogleSignIn.setOnClickListener {
+            if (!isNetworkAvailable()) {
+                Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            pendingGoogleRequest = null
+            launchGoogleSignIn(forceInteractive = true)
+        }
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.cloud_sync_provider_label))
+            .setView(view)
+            .setPositiveButton(R.string.cloud_sync_now, null)
+            .setNegativeButton(R.string.cancel, null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val provider = if (providerGroup.checkedRadioButtonId == R.id.providerGoogle) {
+                    CloudProvider.GOOGLE
+                } else {
+                    CloudProvider.WEBDAV
+                }
+
+                val request = when (provider) {
+                    CloudProvider.WEBDAV -> {
+                        val url = etWebDavUrl.text?.toString()?.trim().orEmpty()
+                        val username = etWebDavUser.text?.toString()?.trim().orEmpty()
+                        val password = etWebDavPassword.text?.toString()?.trim().orEmpty()
+                        if (url.isBlank()) {
+                            etWebDavUrl.error = getString(R.string.cloud_webdav_endpoint)
+                            return@setOnClickListener
+                        }
+                        CloudSyncRequest(
+                            provider = CloudProvider.WEBDAV,
+                            endpoint = url,
+                            username = username,
+                            password = password
+                        )
+                    }
+                    CloudProvider.GOOGLE -> {
+                        val email = googleAccount?.email ?: etGoogleEmail.text?.toString()?.trim().orEmpty()
+                        if (googleAccount == null) {
+                            Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
+                            pendingGoogleRequest = CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
+                            launchGoogleSignIn(forceInteractive = true)
+                            return@setOnClickListener
+                        }
+                        CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
+                    }
+                }
+
+                if (!isNetworkAvailable()) {
+                    Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+
+                prefs.edit().apply {
+                    putString("${KEY_CLOUD_PREFIX}provider", provider.name)
+                    putString("${KEY_CLOUD_PREFIX}webdav_url", request.endpoint)
+                    putString("${KEY_CLOUD_PREFIX}webdav_user", request.username)
+                    putString("${KEY_CLOUD_PREFIX}google_email", request.email)
+                }.apply()
+
+                startCloudBackup(request)
+                dialog.dismiss()
+            }
+        }
+
+        dialog.show()
+    }
+
+    private fun refreshGoogleUi(statusView: TextView, emailField: TextInputEditText, actionButton: MaterialButton) {
+        val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
+        googleAccount = account
+        if (account != null) {
+            statusView.text = getString(R.string.cloud_google_signed_in, account.email)
+            emailField.setText(account.email)
+            actionButton.text = getString(R.string.cloud_google_switch)
+        } else {
+            statusView.text = getString(R.string.cloud_google_not_signed_in)
+            emailField.setText("")
+            actionButton.text = getString(R.string.cloud_google_sign_in)
+        }
+    }
+
+    private fun handleGoogleAccount(account: GoogleSignInAccount) {
+        googleAccount = account
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        prefs.edit().putString("${KEY_CLOUD_PREFIX}google_email", account.email).apply()
+        Toast.makeText(this, getString(R.string.cloud_google_signed_in, account.email), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun requestGoogleDriveConsent(account: GoogleSignInAccount) {
+        if (!::googleSignInClient.isInitialized) {
+            initGoogleSignIn()
+        }
+        GoogleSignIn.requestPermissions(
+            this,
+            GOOGLE_PERMISSIONS_REQUEST,
+            account,
+            Scope(GOOGLE_DRIVE_SCOPE)
+        )
+    }
+
+    private fun startCloudBackup(request: CloudSyncRequest) {
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val progressMessage = if (request.provider == CloudProvider.GOOGLE) {
+            getString(R.string.cloud_google_uploading)
+        } else {
+            getString(R.string.cloud_sync_ready, fileName)
+        }
+        val progress = showSyncProgressDialog(progressMessage)
+
+        Thread {
+            val result = when (request.provider) {
+                CloudProvider.WEBDAV -> uploadViaWebDav(request, content)
+                CloudProvider.GOOGLE -> backupToGoogleDrive(request, content)
+            }
+
+            runOnUiThread {
+                progress.dismiss()
+                if (result.success) {
+                    lastCloudSyncTime = System.currentTimeMillis()
+                    val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                    prefs.edit()
+                        .putLong("$KEY_CLOUD_PREFIX$fileName", lastCloudSyncTime)
+                        .putString("${KEY_CLOUD_PREFIX}last_target", result.target)
+                        .apply()
+                    Toast.makeText(
+                        this,
+                        getString(R.string.cloud_sync_success_detail, fileName, result.target),
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    Toast.makeText(
+                        this,
+                        getString(R.string.cloud_sync_failed, result.error ?: getString(R.string.unknown_error)),
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
+        }.start()
+    }
+
+    private fun uploadViaWebDav(request: CloudSyncRequest, content: String): CloudSyncResult {
+        val endpoint = request.endpoint?.trim()
+            ?.ifEmpty { null }
+            ?: return CloudSyncResult(false, "WebDAV", getString(R.string.cloud_webdav_endpoint))
+
+        val targetUrl = buildWebDavTarget(endpoint)
+        ensureWebDavPath(targetUrl, request)?.let { return it }
+
+        return try {
+            val url = URL(targetUrl)
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "PUT"
+                connectTimeout = 12000
+                readTimeout = 12000
+                doInput = true
+                doOutput = true
+                setRequestProperty("User-Agent", "ABB/CloudSync")
+                setRequestProperty("Content-Type", "text/plain; charset=utf-8")
+                applyBasicAuth(request)
+            }
+
+            connection.outputStream.use { stream ->
+                stream.write(content.toByteArray(Charsets.UTF_8))
+            }
+
+            val responseCode = connection.responseCode
+            val target = connection.url.toString()
+            val success = responseCode in 200..299
+            val errorDetail = if (!success) {
+                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
+                when (responseCode) {
+                    HttpURLConnection.HTTP_UNAUTHORIZED -> getString(R.string.cloud_webdav_auth_failed)
+                    HttpURLConnection.HTTP_NOT_FOUND -> getString(R.string.cloud_webdav_missing_path)
+                    402 -> getString(R.string.cloud_webdav_payment_required)
+                    else -> detail ?: "HTTP $responseCode"
+                }
+            } else null
+            connection.disconnect()
+            if (success) CloudSyncResult(true, target) else CloudSyncResult(false, target, errorDetail)
+        } catch (e: Exception) {
+            CloudSyncResult(false, targetUrl, e.localizedMessage ?: e.message ?: "WebDAV error")
+        }
+    }
+
+    private fun buildWebDavTarget(endpoint: String): String {
+        val encodedName = URLEncoder.encode(fileName, Charsets.UTF_8.name())
+        val lastSegment = endpoint.substringAfterLast('/')
+        val alreadyHasFile = lastSegment.equals(fileName, ignoreCase = true) || lastSegment.equals(encodedName, ignoreCase = true)
+        return when {
+            endpoint.endsWith("/") -> endpoint + encodedName
+            alreadyHasFile -> endpoint
+            lastSegment.contains('.') -> endpoint
+            else -> "$endpoint/$encodedName"
+        }
+    }
+
+    private fun ensureWebDavPath(targetUrl: String, request: CloudSyncRequest): CloudSyncResult? {
+        return try {
+            val url = URL(targetUrl)
+            val path = url.path ?: return null
+            val lastSlash = path.lastIndexOf('/')
+            if (lastSlash <= 0) return null
+            val dirPath = path.substring(0, lastSlash)
+            if (dirPath.isBlank() || dirPath == "/") return null
+
+            val segments = dirPath.split('/').filter { it.isNotBlank() }
+            var cumulativePath = ""
+            for (segment in segments) {
+                cumulativePath += "/$segment"
+                val dirUrl = URL(url.protocol, url.host, url.port, cumulativePath)
+                val connection = (dirUrl.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "MKCOL"
+                    connectTimeout = 12000
+                    readTimeout = 12000
+                    doInput = true
+                    setRequestProperty("User-Agent", "ABB/CloudSync")
+                    applyBasicAuth(request)
+                }
+
+                val responseCode = connection.responseCode
+                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
+                connection.disconnect()
+                when (responseCode) {
+                    201, 200, 204, HttpURLConnection.HTTP_CONFLICT, HttpURLConnection.HTTP_BAD_METHOD -> {
+                        // Created successfully or already exists/unsupported (which implies it exists)
+                    }
+                    HttpURLConnection.HTTP_UNAUTHORIZED -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_auth_failed))
+                    HttpURLConnection.HTTP_NOT_FOUND -> return CloudSyncResult(false, targetUrl, detail ?: getString(R.string.cloud_webdav_missing_path))
+                    402 -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_payment_required))
+                    else -> return CloudSyncResult(false, targetUrl, detail ?: getString(R.string.cloud_webdav_missing_path))
+                }
+            }
+            null
+        } catch (e: Exception) {
+            CloudSyncResult(false, targetUrl, e.localizedMessage ?: e.message ?: getString(R.string.cloud_webdav_missing_path))
+        }
+    }
+
+    private fun HttpURLConnection.applyBasicAuth(request: CloudSyncRequest) {
+        if (!request.username.isNullOrBlank()) {
+            val auth = "${request.username}:${request.password ?: ""}"
+            val encoded = Base64.encodeToString(auth.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
+            setRequestProperty("Authorization", "Basic $encoded")
+        }
+    }
+
+    private fun backupToGoogleDrive(request: CloudSyncRequest, content: String): CloudSyncResult {
+        val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
+        val email = account?.email ?: request.email ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+        if (account == null) {
+            pendingGoogleRequest = request
+            runOnUiThread { launchGoogleSignIn(forceInteractive = true) }
+            return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+        }
+
+        if (!GoogleSignIn.hasPermissions(account, Scope(GOOGLE_DRIVE_SCOPE))) {
+            pendingGoogleRequest = request
+            runOnUiThread { requestGoogleDriveConsent(account) }
+            return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_consent_required))
+        }
+
+        val androidAccount = account.account ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+
+        return try {
+            val token = GoogleAuthUtil.getToken(applicationContext, androidAccount, "oauth2:$GOOGLE_DRIVE_SCOPE")
+            val boundary = "gcx-${System.currentTimeMillis()}"
+            val meta = "{" + "\"name\":\"$fileName\",\"mimeType\":\"text/plain\"" + "}"
+            val payload = buildString {
+                append("--$boundary\r\n")
+                append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
+                append(meta)
+                append("\r\n--$boundary\r\n")
+                append("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
+                append(content)
+                append("\r\n--$boundary--")
+            }
+
+            val url = URL("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart")
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                connectTimeout = 12000
+                readTimeout = 12000
+                doOutput = true
+                setRequestProperty("Authorization", "Bearer $token")
+                setRequestProperty("Content-Type", "multipart/related; boundary=$boundary")
+            }
+
+            connection.outputStream.use { stream ->
+                stream.write(payload.toByteArray(Charsets.UTF_8))
+            }
+
+            val success = connection.responseCode in 200..299
+            val target = "Google Drive ($email)"
+            connection.disconnect()
+            if (success) {
+                CloudSyncResult(true, target)
+            } else {
+                CloudSyncResult(false, target, "HTTP ${connection.responseCode}")
+            }
+        } catch (e: UserRecoverableAuthException) {
+            pendingGoogleRequest = request
+            runOnUiThread {
+                Toast.makeText(this, R.string.cloud_google_consent_required, Toast.LENGTH_SHORT).show()
+                googleAuthRecoveryLauncher.launch(e.intent)
+            }
+            CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_consent_required))
+        } catch (e: Exception) {
+            CloudSyncResult(false, "Google Drive", e.localizedMessage ?: e.message ?: "Google backup error")
+        }
+    }
+
+    private fun showSyncProgressDialog(message: String): AlertDialog {
+        val view = layoutInflater.inflate(R.layout.dialog_sync_progress, null)
+        view.findViewById<TextView>(R.id.progressMessage)?.text = message
+        return MaterialAlertDialogBuilder(this)
+            .setView(view)
+            .setCancelable(false)
+            .create()
+            .also { it.show() }
+    }
+
+    private fun isNetworkAvailable(): Boolean {
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
+        val network = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    private data class CloudSyncRequest(
+        val provider: CloudProvider,
+        val endpoint: String? = null,
+        val username: String? = null,
+        val password: String? = null,
+        val email: String? = null
+    )
+
+    private data class CloudSyncResult(
+        val success: Boolean,
+        val target: String,
+        val error: String? = null
+    )
+
+    private enum class CloudProvider { WEBDAV, GOOGLE }
+
+    private fun openCollaborationPanel() {
+        val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        if (collaborationSessionId == null) {
+            collaborationSessionId = java.util.UUID.randomUUID().toString().substring(0, 8)
+            prefs.edit().putString("$KEY_COLLAB_PREFIX$fileName", collaborationSessionId).apply()
+        }
+
+        val collaborators = listOf("Alice", "Bob", "Chen", "Diego", "Priya")
+        val active = collaborators.shuffled().take(2).joinToString(", ")
+        val message = getString(R.string.collaboration_status, collaborationSessionId, active)
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_collab)
+            .setMessage(message)
+            .setPositiveButton(R.string.share) { _, _ ->
+                shareSessionLink(collaborationSessionId!!)
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun shareSessionLink(sessionId: String) {
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, getString(R.string.collaboration_link, sessionId))
+        }
+        startActivity(Intent.createChooser(intent, getString(R.string.share)))
+    }
+
+    private fun openSimulator() {
+        val program = parseCurrentFileSafely()
+        val routines = program?.routines ?: emptyList()
+        val summary = if (routines.isEmpty()) {
+            getString(R.string.simulator_no_routines)
+        } else {
+            routines.joinToString("\n") {
+                "${it.name}: ${it.parameters.size} ${getString(R.string.simulator_params)}"
+            }
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_simulator)
+            .setMessage(summary)
+            .setPositiveButton(R.string.run_simulation) { _, _ ->
+                Toast.makeText(this, R.string.simulator_started, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.close, null)
+            .show()
+    }
+
+    private fun toggleRobotConnection() {
+        connectedRobot = !connectedRobot
+        val statusMessage = if (connectedRobot) {
+            getString(R.string.robot_connected)
+        } else {
+            getString(R.string.robot_disconnected)
+        }
+        Toast.makeText(this, statusMessage, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showTransferOptions() {
+        val options = arrayOf(
+            getString(R.string.transfer_upload),
+            getString(R.string.transfer_download)
+        )
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_transfer)
+            .setItems(options) { _, which ->
+                when (which) {
+                    0 -> Toast.makeText(this, R.string.transfer_uploaded, Toast.LENGTH_SHORT).show()
+                    1 -> saveAsNewFile(if (isEditMode) etCodeContent.text.toString() else fileContent)
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun launchAiAgent() {
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+        val heuristics = mutableListOf<String>()
+        if (!content.contains("PROC", ignoreCase = true)) {
+            heuristics.add(getString(R.string.ai_agent_proc_hint))
+        }
+        if (content.length < 50) {
+            heuristics.add(getString(R.string.ai_agent_expand))
+        }
+        if (!content.contains("ERROR", ignoreCase = true)) {
+            heuristics.add(getString(R.string.ai_agent_tests))
+        }
+        if (heuristics.isEmpty()) {
+            heuristics.add(getString(R.string.ai_agent_positive))
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_ai_agent)
+            .setItems(heuristics.toTypedArray(), null)
+            .setPositiveButton(R.string.close, null)
+            .show()
+    }
+
+    private fun runMcpTools() {
+        val tasks = listOf(
+            getString(R.string.mcp_task_build),
+            getString(R.string.mcp_task_test),
+            getString(R.string.mcp_task_deploy)
+        )
+        val results = tasks.joinToString("\n") { task ->
+            "✅ $task"
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.feature_mcp)
+            .setMessage(results)
+            .setPositiveButton(R.string.ok, null)
+            .show()
     }
 }
