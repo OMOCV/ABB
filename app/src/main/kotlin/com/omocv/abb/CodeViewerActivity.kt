@@ -1815,39 +1815,133 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun showCloudSyncDialog() {
-        val view = layoutInflater.inflate(R.layout.dialog_cloud_sync, null)
-        val providerGroup = view.findViewById<RadioGroup>(R.id.cloudProviderGroup)
-        val webDavContainer = view.findViewById<View>(R.id.webDavContainer)
-        val googleContainer = view.findViewById<View>(R.id.googleContainer)
+        val view = layoutInflater.inflate(R.layout.dialog_cloud_sync_v2, null)
+        val spinner = view.findViewById<android.widget.Spinner>(R.id.spinnerCloudProvider)
+
+        // Configuration containers
+        val containerWebDav = view.findViewById<View>(R.id.containerWebDav)
+        val containerOAuth = view.findViewById<View>(R.id.containerOAuth)
+        val containerToken = view.findViewById<View>(R.id.containerToken)
+        val containerUserPass = view.findViewById<View>(R.id.containerUserPass)
+
+        // WebDAV fields
         val etWebDavUrl = view.findViewById<TextInputEditText>(R.id.etWebDavUrl)
         val etWebDavUser = view.findViewById<TextInputEditText>(R.id.etWebDavUser)
         val etWebDavPassword = view.findViewById<TextInputEditText>(R.id.etWebDavPassword)
-        val etGoogleEmail = view.findViewById<TextInputEditText>(R.id.etGoogleEmail)
-        val tvGoogleStatus = view.findViewById<TextView>(R.id.tvGoogleStatus)
-        val btnGoogleSignIn = view.findViewById<MaterialButton>(R.id.btnGoogleSignIn)
+
+        // OAuth fields
+        val etOAuthEmail = view.findViewById<TextInputEditText>(R.id.etOAuthEmail)
+        val tvOAuthStatus = view.findViewById<TextView>(R.id.tvOAuthStatus)
+        val btnOAuthSignIn = view.findViewById<MaterialButton>(R.id.btnOAuthSignIn)
+
+        // Token fields
+        val etToken = view.findViewById<TextInputEditText>(R.id.etToken)
+
+        // Username/Password fields
+        val etUsername = view.findViewById<TextInputEditText>(R.id.etUsername)
+        val etPassword = view.findViewById<TextInputEditText>(R.id.etPassword)
+
+        // Test connection
+        val btnTestConnection = view.findViewById<MaterialButton>(R.id.btnTestConnection)
+        val tvConnectionStatus = view.findViewById<TextView>(R.id.tvConnectionStatus)
+
+        // Set up provider spinner
+        val providers = CloudProvider.values().toList()
+        val adapter = CloudProviderAdapter(this, providers)
+        spinner.adapter = adapter
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        // Load saved settings
         etWebDavUrl.setText(prefs.getString("${KEY_CLOUD_PREFIX}webdav_url", ""))
         etWebDavUser.setText(prefs.getString("${KEY_CLOUD_PREFIX}webdav_user", ""))
-        etGoogleEmail.setText(prefs.getString("${KEY_CLOUD_PREFIX}google_email", ""))
 
-        refreshGoogleUi(tvGoogleStatus, etGoogleEmail, btnGoogleSignIn)
+        var selectedProvider = CloudProvider.WEBDAV
 
-        providerGroup.setOnCheckedChangeListener { _, checkedId ->
-            val webDavSelected = checkedId == R.id.providerWebDav
-            webDavContainer.visibility = if (webDavSelected) View.VISIBLE else View.GONE
-            googleContainer.visibility = if (webDavSelected) View.GONE else View.VISIBLE
-            if (!webDavSelected) {
-                refreshGoogleUi(tvGoogleStatus, etGoogleEmail, btnGoogleSignIn)
+        // Hide all containers initially
+        fun hideAllContainers() {
+            containerWebDav.visibility = View.GONE
+            containerOAuth.visibility = View.GONE
+            containerToken.visibility = View.GONE
+            containerUserPass.visibility = View.GONE
+            tvConnectionStatus.visibility = View.GONE
+        }
+
+        // Show container based on provider auth type
+        fun showContainerForProvider(provider: CloudProvider) {
+            hideAllContainers()
+            selectedProvider = provider
+
+            when (provider.authType) {
+                CloudProvider.AuthType.USERNAME_PASSWORD -> {
+                    if (provider == CloudProvider.WEBDAV) {
+                        containerWebDav.visibility = View.VISIBLE
+                    } else {
+                        containerUserPass.visibility = View.VISIBLE
+                    }
+                }
+                CloudProvider.AuthType.OAUTH -> {
+                    containerOAuth.visibility = View.VISIBLE
+                    refreshOAuthUi(provider, tvOAuthStatus, etOAuthEmail, btnOAuthSignIn)
+                }
+                CloudProvider.AuthType.TOKEN -> {
+                    containerToken.visibility = View.VISIBLE
+                }
+                CloudProvider.AuthType.API_KEY -> {
+                    containerToken.visibility = View.VISIBLE
+                }
             }
         }
 
-        btnGoogleSignIn.setOnClickListener {
+        spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val provider = providers[position]
+                showContainerForProvider(provider)
+            }
+
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+
+        // Initialize with first provider
+        showContainerForProvider(providers[0])
+
+        // OAuth sign in handler
+        btnOAuthSignIn.setOnClickListener {
             if (!isNetworkAvailable()) {
                 Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            launchGoogleSignIn(forceInteractive = true)
+
+            when (selectedProvider) {
+                CloudProvider.GOOGLE_DRIVE -> launchGoogleSignIn(forceInteractive = true)
+                CloudProvider.ONEDRIVE -> {
+                    Toast.makeText(this, "OneDrive 登录功能开发中", Toast.LENGTH_SHORT).show()
+                }
+                CloudProvider.BAIDU_CLOUD -> {
+                    Toast.makeText(this, "百度网盘登录功能开发中", Toast.LENGTH_SHORT).show()
+                }
+                else -> {}
+            }
+        }
+
+        // Test connection handler
+        btnTestConnection.setOnClickListener {
+            tvConnectionStatus.visibility = View.VISIBLE
+            tvConnectionStatus.text = getString(R.string.cloud_testing_connection)
+            tvConnectionStatus.setTextColor(getColor(android.R.color.darker_gray))
+
+            lifecycleScope.launch {
+                val result = testCloudConnection(selectedProvider, view)
+                tvConnectionStatus.text = if (result.first) {
+                    getString(R.string.cloud_test_success)
+                } else {
+                    getString(R.string.cloud_test_failed, result.second)
+                }
+                tvConnectionStatus.setTextColor(
+                    if (result.first) getColor(android.R.color.holo_green_dark)
+                    else getColor(android.R.color.holo_red_dark)
+                )
+            }
         }
 
         val dialog = MaterialAlertDialogBuilder(this)
@@ -1859,52 +1953,115 @@ class CodeViewerActivity : AppCompatActivity() {
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val isWebDav = providerGroup.checkedRadioButtonId == R.id.providerWebDav
+                when (selectedProvider) {
+                    CloudProvider.WEBDAV -> {
+                        val url = etWebDavUrl.text?.toString()?.trim().orEmpty()
+                        val username = etWebDavUser.text?.toString()?.trim().orEmpty()
+                        val password = etWebDavPassword.text?.toString()?.trim().orEmpty()
 
-                if (isWebDav) {
-                    // WebDAV sync
-                    val url = etWebDavUrl.text?.toString()?.trim().orEmpty()
-                    val username = etWebDavUser.text?.toString()?.trim().orEmpty()
-                    val password = etWebDavPassword.text?.toString()?.trim().orEmpty()
+                        if (url.isBlank()) {
+                            etWebDavUrl.error = getString(R.string.cloud_webdav_endpoint)
+                            return@setOnClickListener
+                        }
 
-                    if (url.isBlank()) {
-                        etWebDavUrl.error = getString(R.string.cloud_webdav_endpoint)
-                        return@setOnClickListener
+                        prefs.edit().apply {
+                            putString("${KEY_CLOUD_PREFIX}provider", selectedProvider.name)
+                            putString("${KEY_CLOUD_PREFIX}webdav_url", url)
+                            putString("${KEY_CLOUD_PREFIX}webdav_user", username)
+                        }.apply()
+
+                        dialog.dismiss()
+                        startCloudBackup(isWebDav = true, url = url, username = username, password = password)
                     }
 
-                    // Save preferences
-                    prefs.edit().apply {
-                        putString("${KEY_CLOUD_PREFIX}provider", "WEBDAV")
-                        putString("${KEY_CLOUD_PREFIX}webdav_url", url)
-                        putString("${KEY_CLOUD_PREFIX}webdav_user", username)
-                    }.apply()
+                    CloudProvider.GOOGLE_DRIVE -> {
+                        val email = googleAccount?.email ?: etOAuthEmail.text?.toString()?.trim().orEmpty()
 
-                    dialog.dismiss()
-                    startCloudBackup(isWebDav = true, url = url, username = username, password = password)
+                        if (googleAccount == null) {
+                            Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
+                            launchGoogleSignIn(forceInteractive = true)
+                            return@setOnClickListener
+                        }
 
-                } else {
-                    // Google Drive sync
-                    val email = googleAccount?.email ?: etGoogleEmail.text?.toString()?.trim().orEmpty()
+                        prefs.edit().apply {
+                            putString("${KEY_CLOUD_PREFIX}provider", selectedProvider.name)
+                            putString("${KEY_CLOUD_PREFIX}google_email", email)
+                        }.apply()
 
-                    if (googleAccount == null) {
-                        Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
-                        launchGoogleSignIn(forceInteractive = true)
-                        return@setOnClickListener
+                        dialog.dismiss()
+                        startCloudBackup(isWebDav = false)
                     }
 
-                    // Save preferences
-                    prefs.edit().apply {
-                        putString("${KEY_CLOUD_PREFIX}provider", "GOOGLE")
-                        putString("${KEY_CLOUD_PREFIX}google_email", email)
-                    }.apply()
-
-                    dialog.dismiss()
-                    startCloudBackup(isWebDav = false)
+                    else -> {
+                        Toast.makeText(this, "${selectedProvider.name} 功能正在开发中", Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
 
         dialog.show()
+    }
+
+    private fun refreshOAuthUi(provider: CloudProvider, statusView: TextView, emailField: TextInputEditText, actionButton: MaterialButton) {
+        when (provider) {
+            CloudProvider.GOOGLE_DRIVE -> {
+                val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
+                googleAccount = account
+                if (account != null) {
+                    statusView.text = getString(R.string.cloud_google_signed_in, account.email)
+                    emailField.setText(account.email)
+                    actionButton.text = getString(R.string.cloud_google_switch)
+                } else {
+                    statusView.text = getString(R.string.cloud_google_not_signed_in)
+                    emailField.setText("")
+                    actionButton.text = getString(R.string.cloud_google_sign_in)
+                }
+            }
+            else -> {
+                statusView.text = "请使用 ${getString(provider.displayNameRes)} 登录"
+                emailField.setText("")
+                actionButton.text = "登录"
+            }
+        }
+    }
+
+    private suspend fun testCloudConnection(provider: CloudProvider, view: View): Pair<Boolean, String> {
+        return try {
+            when (provider) {
+                CloudProvider.WEBDAV -> {
+                    val url = view.findViewById<TextInputEditText>(R.id.etWebDavUrl).text?.toString()?.trim().orEmpty()
+                    val username = view.findViewById<TextInputEditText>(R.id.etWebDavUser).text?.toString()?.trim().orEmpty()
+                    val password = view.findViewById<TextInputEditText>(R.id.etWebDavPassword).text?.toString()?.trim().orEmpty()
+
+                    if (url.isBlank()) {
+                        return Pair(false, "请输入 WebDAV 地址")
+                    }
+
+                    // Test connection with CloudSyncManager
+                    val config = CloudSyncManager.WebDavConfig(url, username, password)
+                    val result = cloudSyncManager.syncToWebDav(config, "test.txt", "test") {}
+
+                    when (result) {
+                        is CloudSyncManager.SyncResult.Success -> Pair(true, "连接成功")
+                        is CloudSyncManager.SyncResult.Failure -> Pair(false, result.error)
+                        else -> Pair(false, "未知错误")
+                    }
+                }
+
+                CloudProvider.GOOGLE_DRIVE -> {
+                    if (googleAccount == null) {
+                        return Pair(false, "请先登录 Google 账号")
+                    }
+                    Pair(true, "Google 账号已登录")
+                }
+
+                else -> {
+                    Pair(false, "该功能正在开发中")
+                }
+            }
+        } catch (e: Exception) {
+            Pair(false, e.message ?: "未知错误")
+        }
     }
 
     private fun refreshGoogleUi(statusView: TextView, emailField: TextInputEditText, actionButton: MaterialButton) {
