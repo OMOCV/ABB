@@ -104,29 +104,48 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private val googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        android.util.Log.d("GoogleSignIn", "Result received: resultCode=${result.resultCode}, data=${result.data}")
+
         if (result.resultCode != RESULT_OK) {
-            Toast.makeText(this, R.string.cloud_google_signin_cancelled, Toast.LENGTH_SHORT).show()
+            android.util.Log.w("GoogleSignIn", "Sign-in cancelled or failed: resultCode=${result.resultCode}")
+            Toast.makeText(this, "已取消登录，请重新选择账号完成授权", Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
 
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        if (result.data == null) {
+            android.util.Log.e("GoogleSignIn", "Result data is null")
+            Toast.makeText(this, "登录数据为空，请重试", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+
         try {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             val account = task.getResult(ApiException::class.java)
+
+            android.util.Log.d("GoogleSignIn", "Account received: ${account.email}")
+
             // Save account first, even if Drive permission not granted yet
             handleGoogleAccount(account)
 
             // Then check and request Drive permission if needed
             if (!GoogleSignIn.hasPermissions(account, Scope(GOOGLE_DRIVE_SCOPE))) {
+                android.util.Log.d("GoogleSignIn", "Drive permissions not granted, requesting...")
                 Toast.makeText(this, "需要授予 Google Drive 权限才能同步文件", Toast.LENGTH_LONG).show()
                 requestGoogleDriveConsent(account)
+            } else {
+                android.util.Log.d("GoogleSignIn", "Drive permissions already granted")
             }
         } catch (e: ApiException) {
+            android.util.Log.e("GoogleSignIn", "ApiException: statusCode=${e.statusCode}, message=${e.message}", e)
             val message = when (e.statusCode) {
-                com.google.android.gms.common.api.CommonStatusCodes.CANCELED -> getString(R.string.cloud_google_signin_cancelled)
-                12500 /* DEVELOPER_ERROR */ -> getString(R.string.cloud_google_signin_unconfigured)
-                else -> e.localizedMessage ?: e.message ?: "Sign-in failed"
+                com.google.android.gms.common.api.CommonStatusCodes.CANCELED -> "用户取消了登录"
+                12500 /* DEVELOPER_ERROR */ -> "Google 登录配置错误，请检查签名设置"
+                else -> "登录失败: ${e.localizedMessage ?: e.message ?: "未知错误"}"
             }
-            Toast.makeText(this, "Google 登录失败: $message", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleSignIn", "Unexpected error", e)
+            Toast.makeText(this, "登录出错: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -220,18 +239,23 @@ class CodeViewerActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        android.util.Log.d("GoogleSignIn", "onActivityResult: requestCode=$requestCode, resultCode=$resultCode")
+
         if (requestCode == GOOGLE_PERMISSIONS_REQUEST) {
             if (resultCode != RESULT_OK) {
+                android.util.Log.w("GoogleSignIn", "Permission request cancelled or failed: resultCode=$resultCode")
                 Toast.makeText(this, "Drive 权限请求已取消，同步功能需要此权限", Toast.LENGTH_SHORT).show()
                 return
             }
 
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
             try {
+                val task = GoogleSignIn.getSignedInAccountFromIntent(data)
                 val account = task.getResult(ApiException::class.java)
+                android.util.Log.d("GoogleSignIn", "Drive permission granted for ${account.email}")
                 handleGoogleAccount(account)
                 Toast.makeText(this, "Google Drive 权限已授予", Toast.LENGTH_SHORT).show()
             } catch (e: ApiException) {
+                android.util.Log.e("GoogleSignIn", "Permission grant failed: ${e.statusCode}", e)
                 Toast.makeText(
                     this,
                     "权限授予失败: ${e.localizedMessage ?: e.message}",
@@ -2081,15 +2105,22 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun requestGoogleDriveConsent(account: GoogleSignInAccount) {
+        android.util.Log.d("GoogleSignIn", "Requesting Drive consent for ${account.email}")
         if (!::googleSignInClient.isInitialized) {
             initGoogleSignIn()
         }
-        GoogleSignIn.requestPermissions(
-            this,
-            GOOGLE_PERMISSIONS_REQUEST,
-            account,
-            Scope(GOOGLE_DRIVE_SCOPE)
-        )
+        try {
+            GoogleSignIn.requestPermissions(
+                this,
+                GOOGLE_PERMISSIONS_REQUEST,
+                account,
+                Scope(GOOGLE_DRIVE_SCOPE)
+            )
+            android.util.Log.d("GoogleSignIn", "Permission request launched")
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleSignIn", "Failed to request permissions", e)
+            Toast.makeText(this, "无法请求权限: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     // ===== NEW CLOUD SYNC IMPLEMENTATION USING CloudSyncManager =====

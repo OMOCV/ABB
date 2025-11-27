@@ -236,33 +236,46 @@ class CloudSyncManager(private val context: Context) {
                 cumulativePath += "/$segment"
                 val dirUrl = URL(url.protocol, url.host, url.port, cumulativePath)
 
-                val connection = dirUrl.openConnection() as HttpURLConnection
-                connection.requestMethod = "MKCOL"
-                connection.connectTimeout = CONNECTION_TIMEOUT
-                connection.readTimeout = READ_TIMEOUT
-                connection.setRequestProperty("User-Agent", "ABB-CloudSync/2.0")
+                try {
+                    val connection = dirUrl.openConnection() as HttpURLConnection
+                    connection.requestMethod = "MKCOL"
+                    connection.connectTimeout = CONNECTION_TIMEOUT
+                    connection.readTimeout = READ_TIMEOUT
+                    connection.setRequestProperty("User-Agent", "ABB-CloudSync/2.0")
 
-                if (config.username.isNotBlank()) {
-                    val auth = "${config.username}:${config.password}"
-                    val encoded = Base64.encodeToString(auth.toByteArray(), Base64.NO_WRAP)
-                    connection.setRequestProperty("Authorization", "Basic $encoded")
-                }
-
-                val responseCode = connection.responseCode
-                connection.disconnect()
-
-                // 201 = created, 405 = already exists, 200/204 = OK
-                if (responseCode !in listOf(200, 201, 204, 405, 409)) {
-                    if (responseCode == 401) {
-                        return SyncResult.Failure("WebDAV", "Authentication failed - check username/password", false)
+                    if (config.username.isNotBlank()) {
+                        val auth = "${config.username}:${config.password}"
+                        val encoded = Base64.encodeToString(auth.toByteArray(), Base64.NO_WRAP)
+                        connection.setRequestProperty("Authorization", "Basic $encoded")
                     }
-                    return SyncResult.Failure("WebDAV", "Failed to create directory: HTTP $responseCode", true)
+
+                    val responseCode = connection.responseCode
+                    connection.disconnect()
+
+                    // 201 = created, 405 = already exists/method not allowed, 200/204 = OK, 409 = conflict
+                    when {
+                        responseCode == 401 -> {
+                            return SyncResult.Failure("WebDAV", "认证失败 - 请检查用户名/密码", false)
+                        }
+                        responseCode in listOf(200, 201, 204, 405, 409) -> {
+                            // Success or directory already exists or method not supported - continue
+                            Log.d(TAG, "Directory check for $cumulativePath: HTTP $responseCode")
+                        }
+                        else -> {
+                            // Other errors - log but don't fail
+                            Log.w(TAG, "Directory creation returned HTTP $responseCode, continuing anyway")
+                        }
+                    }
+                } catch (e: Exception) {
+                    // If MKCOL fails (e.g., method not supported), log and continue
+                    Log.w(TAG, "Directory creation error (will try upload anyway): ${e.message}")
                 }
             }
-            null
+            null // Return null = success (or acceptable failure)
         } catch (e: Exception) {
-            Log.e(TAG, "Error ensuring WebDAV directories", e)
-            SyncResult.Failure("WebDAV", "Directory creation error: ${e.message}", true)
+            // Only fail if it's a critical error
+            Log.w(TAG, "Error ensuring WebDAV directories (will try upload anyway): ${e.message}")
+            null // Don't fail - let the upload attempt proceed
         }
     }
 
