@@ -21,6 +21,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.appbar.MaterialToolbar
 import com.google.android.material.color.MaterialColors
@@ -87,8 +89,6 @@ class CodeViewerActivity : AppCompatActivity() {
     private var lastCloudSyncTime: Long = 0L
     private lateinit var googleSignInClient: GoogleSignInClient
     private var googleAccount: GoogleSignInAccount? = null
-    private var pendingGoogleRequest: CloudSyncRequest? = null
-    
     // File save launcher for save-as functionality
     private val saveFileLauncher = registerForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()
@@ -104,42 +104,53 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private val googleSignInLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        android.util.Log.d("GoogleSignIn", "Result received: resultCode=${result.resultCode}, data=${result.data}")
+
         if (result.resultCode != RESULT_OK) {
-            googleAccount = null
-            Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
+            android.util.Log.w("GoogleSignIn", "Sign-in cancelled or failed: resultCode=${result.resultCode}")
+            Toast.makeText(this, "已取消登录，请重新选择账号完成授权", Toast.LENGTH_SHORT).show()
             return@registerForActivityResult
         }
 
-        val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
+        if (result.data == null) {
+            android.util.Log.e("GoogleSignIn", "Result data is null")
+            Toast.makeText(this, "登录数据为空，请重试", Toast.LENGTH_SHORT).show()
+            return@registerForActivityResult
+        }
+
         try {
+            val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             val account = task.getResult(ApiException::class.java)
+
+            android.util.Log.d("GoogleSignIn", "Account received: ${account.email}")
+
+            // Save account first, even if Drive permission not granted yet
+            handleGoogleAccount(account)
+
+            // Then check and request Drive permission if needed
             if (!GoogleSignIn.hasPermissions(account, Scope(GOOGLE_DRIVE_SCOPE))) {
-                pendingGoogleRequest = pendingGoogleRequest ?: CloudSyncRequest(provider = CloudProvider.GOOGLE, email = account.email)
+                android.util.Log.d("GoogleSignIn", "Drive permissions not granted, requesting...")
+                Toast.makeText(this, "需要授予 Google Drive 权限才能同步文件", Toast.LENGTH_LONG).show()
                 requestGoogleDriveConsent(account)
             } else {
-                handleGoogleAccount(account)
-                pendingGoogleRequest?.let {
-                    pendingGoogleRequest = null
-                    startCloudBackup(it)
-                }
+                android.util.Log.d("GoogleSignIn", "Drive permissions already granted")
             }
         } catch (e: ApiException) {
+            android.util.Log.e("GoogleSignIn", "ApiException: statusCode=${e.statusCode}, message=${e.message}", e)
             val message = when (e.statusCode) {
-                com.google.android.gms.common.api.CommonStatusCodes.CANCELED -> getString(R.string.cloud_google_signin_cancelled)
-                12500 /* DEVELOPER_ERROR */ -> getString(R.string.cloud_google_signin_unconfigured)
-                else -> e.localizedMessage ?: e.message ?: "Sign-in failed"
+                com.google.android.gms.common.api.CommonStatusCodes.CANCELED -> "用户取消了登录"
+                12500 /* DEVELOPER_ERROR */ -> "Google 登录配置错误，请检查签名设置"
+                else -> "登录失败: ${e.localizedMessage ?: e.message ?: "未知错误"}"
             }
-            Toast.makeText(this, getString(R.string.cloud_sync_failed, message), Toast.LENGTH_LONG).show()
+            Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleSignIn", "Unexpected error", e)
+            Toast.makeText(this, "登录出错: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
     private val googleAuthRecoveryLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-        if (result.resultCode == RESULT_OK) {
-            pendingGoogleRequest?.let {
-                pendingGoogleRequest = null
-                startCloudBackup(it)
-            }
-        } else {
+        if (result.resultCode != RESULT_OK) {
             Toast.makeText(this, R.string.cloud_google_consent_required, Toast.LENGTH_SHORT).show()
         }
     }
@@ -228,24 +239,26 @@ class CodeViewerActivity : AppCompatActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        android.util.Log.d("GoogleSignIn", "onActivityResult: requestCode=$requestCode, resultCode=$resultCode")
+
         if (requestCode == GOOGLE_PERMISSIONS_REQUEST) {
             if (resultCode != RESULT_OK) {
-                Toast.makeText(this, R.string.cloud_google_signin_cancelled, Toast.LENGTH_SHORT).show()
+                android.util.Log.w("GoogleSignIn", "Permission request cancelled or failed: resultCode=$resultCode")
+                Toast.makeText(this, "Drive 权限请求已取消，同步功能需要此权限", Toast.LENGTH_SHORT).show()
                 return
             }
 
-            val task = GoogleSignIn.getSignedInAccountFromIntent(data)
             try {
+                val task = GoogleSignIn.getSignedInAccountFromIntent(data)
                 val account = task.getResult(ApiException::class.java)
+                android.util.Log.d("GoogleSignIn", "Drive permission granted for ${account.email}")
                 handleGoogleAccount(account)
-                pendingGoogleRequest?.let {
-                    pendingGoogleRequest = null
-                    startCloudBackup(it)
-                }
+                Toast.makeText(this, "Google Drive 权限已授予", Toast.LENGTH_SHORT).show()
             } catch (e: ApiException) {
+                android.util.Log.e("GoogleSignIn", "Permission grant failed: ${e.statusCode}", e)
                 Toast.makeText(
                     this,
-                    getString(R.string.cloud_sync_failed, e.localizedMessage ?: e.message ?: "Sign-in failed"),
+                    "权限授予失败: ${e.localizedMessage ?: e.message}",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -253,12 +266,23 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun initGoogleSignIn() {
-        val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestScopes(Scope(Scopes.DRIVE_FILE))
-            .build()
-        googleSignInClient = GoogleSignIn.getClient(this, options)
-        googleAccount = GoogleSignIn.getLastSignedInAccount(this)
+        android.util.Log.d("GoogleSignIn", "Initializing Google Sign In")
+        try {
+            val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .requestScopes(Scope(Scopes.DRIVE_FILE))
+                .build()
+            android.util.Log.d("GoogleSignIn", "GoogleSignInOptions created")
+
+            googleSignInClient = GoogleSignIn.getClient(this, options)
+            android.util.Log.d("GoogleSignIn", "GoogleSignInClient created")
+
+            googleAccount = GoogleSignIn.getLastSignedInAccount(this)
+            android.util.Log.d("GoogleSignIn", "Last signed in account: ${googleAccount?.email ?: "none"}")
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleSignIn", "Failed to initialize Google Sign In", e)
+            Toast.makeText(this, "Google 登录初始化失败: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun initViews() {
@@ -1812,57 +1836,192 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun launchGoogleSignIn(forceInteractive: Boolean = false) {
+        android.util.Log.d("GoogleSignIn", "launchGoogleSignIn called, forceInteractive=$forceInteractive")
+
+        // Check Google Play Services availability
+        val playServicesAvailable = try {
+            val resultCode = com.google.android.gms.common.GoogleApiAvailability.getInstance()
+                .isGooglePlayServicesAvailable(this)
+            android.util.Log.d("GoogleSignIn", "Play Services status: $resultCode")
+
+            if (resultCode != com.google.android.gms.common.ConnectionResult.SUCCESS) {
+                val errorMsg = when (resultCode) {
+                    com.google.android.gms.common.ConnectionResult.SERVICE_MISSING ->
+                        "Google Play Services 未安装"
+                    com.google.android.gms.common.ConnectionResult.SERVICE_VERSION_UPDATE_REQUIRED ->
+                        "Google Play Services 需要更新"
+                    com.google.android.gms.common.ConnectionResult.SERVICE_DISABLED ->
+                        "Google Play Services 已禁用"
+                    else -> "Google Play Services 不可用 (错误代码: $resultCode)"
+                }
+                Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
+                return
+            }
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleSignIn", "Error checking Play Services", e)
+            Toast.makeText(this, "无法检查 Google Play Services: ${e.message}", Toast.LENGTH_LONG).show()
+            false
+        }
+
+        if (!playServicesAvailable) return
+
         if (!::googleSignInClient.isInitialized) {
+            android.util.Log.d("GoogleSignIn", "Initializing Google Sign In client")
             initGoogleSignIn()
         }
 
         val startFlow: () -> Unit = {
-            googleSignInLauncher.launch(googleSignInClient.signInIntent)
+            android.util.Log.d("GoogleSignIn", "Launching sign-in intent")
+            try {
+                val signInIntent = googleSignInClient.signInIntent
+                android.util.Log.d("GoogleSignIn", "Sign-in intent created: $signInIntent")
+                googleSignInLauncher.launch(signInIntent)
+            } catch (e: Exception) {
+                android.util.Log.e("GoogleSignIn", "Failed to launch sign-in", e)
+                Toast.makeText(this, "无法启动 Google 登录: ${e.message}", Toast.LENGTH_LONG).show()
+            }
         }
 
         if (forceInteractive) {
+            android.util.Log.d("GoogleSignIn", "Signing out first for interactive flow")
             // Clear any cached session so the user always sees the account/consent sheet
-            googleSignInClient.signOut().addOnCompleteListener { startFlow() }
+            googleSignInClient.signOut().addOnCompleteListener { task ->
+                android.util.Log.d("GoogleSignIn", "Sign out complete, success=${task.isSuccessful}")
+                startFlow()
+            }
         } else {
             startFlow()
         }
     }
 
     private fun showCloudSyncDialog() {
-        val view = layoutInflater.inflate(R.layout.dialog_cloud_sync, null)
-        val providerGroup = view.findViewById<RadioGroup>(R.id.cloudProviderGroup)
-        val webDavContainer = view.findViewById<View>(R.id.webDavContainer)
-        val googleContainer = view.findViewById<View>(R.id.googleContainer)
+        val view = layoutInflater.inflate(R.layout.dialog_cloud_sync_v2, null)
+        val spinner = view.findViewById<android.widget.Spinner>(R.id.spinnerCloudProvider)
+
+        // Configuration containers
+        val containerWebDav = view.findViewById<View>(R.id.containerWebDav)
+        val containerOAuth = view.findViewById<View>(R.id.containerOAuth)
+        val containerToken = view.findViewById<View>(R.id.containerToken)
+        val containerUserPass = view.findViewById<View>(R.id.containerUserPass)
+
+        // WebDAV fields
         val etWebDavUrl = view.findViewById<TextInputEditText>(R.id.etWebDavUrl)
         val etWebDavUser = view.findViewById<TextInputEditText>(R.id.etWebDavUser)
         val etWebDavPassword = view.findViewById<TextInputEditText>(R.id.etWebDavPassword)
-        val etGoogleEmail = view.findViewById<TextInputEditText>(R.id.etGoogleEmail)
-        val tvGoogleStatus = view.findViewById<TextView>(R.id.tvGoogleStatus)
-        val btnGoogleSignIn = view.findViewById<MaterialButton>(R.id.btnGoogleSignIn)
+
+        // OAuth fields
+        val tvOAuthStatus = view.findViewById<TextView>(R.id.tvOAuthStatus)
+        val btnOAuthSignIn = view.findViewById<MaterialButton>(R.id.btnOAuthSignIn)
+
+        // Token fields
+        val etToken = view.findViewById<TextInputEditText>(R.id.etToken)
+
+        // Username/Password fields
+        val etUsername = view.findViewById<TextInputEditText>(R.id.etUsername)
+        val etPassword = view.findViewById<TextInputEditText>(R.id.etPassword)
+
+        // Test connection
+        val btnTestConnection = view.findViewById<MaterialButton>(R.id.btnTestConnection)
+        val tvConnectionStatus = view.findViewById<TextView>(R.id.tvConnectionStatus)
+
+        // Set up provider spinner
+        val providers = CloudProvider.values().toList()
+        val adapter = CloudProviderAdapter(this, providers)
+        spinner.adapter = adapter
 
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+        // Load saved settings
         etWebDavUrl.setText(prefs.getString("${KEY_CLOUD_PREFIX}webdav_url", ""))
         etWebDavUser.setText(prefs.getString("${KEY_CLOUD_PREFIX}webdav_user", ""))
-        etGoogleEmail.setText(prefs.getString("${KEY_CLOUD_PREFIX}google_email", ""))
 
-        refreshGoogleUi(tvGoogleStatus, etGoogleEmail, btnGoogleSignIn)
+        var selectedProvider = CloudProvider.WEBDAV
 
-        providerGroup.setOnCheckedChangeListener { _, checkedId ->
-            val webDavSelected = checkedId == R.id.providerWebDav
-            webDavContainer.visibility = if (webDavSelected) View.VISIBLE else View.GONE
-            googleContainer.visibility = if (webDavSelected) View.GONE else View.VISIBLE
-            if (!webDavSelected) {
-                refreshGoogleUi(tvGoogleStatus, etGoogleEmail, btnGoogleSignIn)
+        // Hide all containers initially
+        fun hideAllContainers() {
+            containerWebDav.visibility = View.GONE
+            containerOAuth.visibility = View.GONE
+            containerToken.visibility = View.GONE
+            containerUserPass.visibility = View.GONE
+            tvConnectionStatus.visibility = View.GONE
+        }
+
+        // Show container based on provider auth type
+        fun showContainerForProvider(provider: CloudProvider) {
+            hideAllContainers()
+            selectedProvider = provider
+
+            when (provider.authType) {
+                CloudProvider.AuthType.USERNAME_PASSWORD -> {
+                    if (provider == CloudProvider.WEBDAV) {
+                        containerWebDav.visibility = View.VISIBLE
+                    } else {
+                        containerUserPass.visibility = View.VISIBLE
+                    }
+                }
+                CloudProvider.AuthType.OAUTH -> {
+                    containerOAuth.visibility = View.VISIBLE
+                    refreshOAuthUi(provider, tvOAuthStatus, btnOAuthSignIn)
+                }
+                CloudProvider.AuthType.TOKEN -> {
+                    containerToken.visibility = View.VISIBLE
+                }
+                CloudProvider.AuthType.API_KEY -> {
+                    containerToken.visibility = View.VISIBLE
+                }
             }
         }
 
-        btnGoogleSignIn.setOnClickListener {
+        spinner.onItemSelectedListener = object : android.widget.AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: android.widget.AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val provider = providers[position]
+                showContainerForProvider(provider)
+            }
+
+            override fun onNothingSelected(parent: android.widget.AdapterView<*>?) {}
+        }
+
+        // Initialize with first provider
+        showContainerForProvider(providers[0])
+
+        // OAuth sign in handler
+        btnOAuthSignIn.setOnClickListener {
             if (!isNetworkAvailable()) {
                 Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            pendingGoogleRequest = null
-            launchGoogleSignIn(forceInteractive = true)
+
+            when (selectedProvider) {
+                CloudProvider.GOOGLE_DRIVE -> launchGoogleSignIn(forceInteractive = true)
+                CloudProvider.ONEDRIVE -> {
+                    Toast.makeText(this, "OneDrive 登录功能开发中", Toast.LENGTH_SHORT).show()
+                }
+                CloudProvider.BAIDU_CLOUD -> {
+                    Toast.makeText(this, "百度网盘登录功能开发中", Toast.LENGTH_SHORT).show()
+                }
+                else -> {}
+            }
+        }
+
+        // Test connection handler
+        btnTestConnection.setOnClickListener {
+            tvConnectionStatus.visibility = View.VISIBLE
+            tvConnectionStatus.text = getString(R.string.cloud_testing_connection)
+            tvConnectionStatus.setTextColor(getColor(android.R.color.darker_gray))
+
+            lifecycleScope.launch {
+                val result = testCloudConnection(selectedProvider, view)
+                tvConnectionStatus.text = if (result.first) {
+                    getString(R.string.cloud_test_success)
+                } else {
+                    getString(R.string.cloud_test_failed, result.second)
+                }
+                tvConnectionStatus.setTextColor(
+                    if (result.first) getColor(android.R.color.holo_green_dark)
+                    else getColor(android.R.color.holo_red_dark)
+                )
+            }
         }
 
         val dialog = MaterialAlertDialogBuilder(this)
@@ -1874,58 +2033,108 @@ class CodeViewerActivity : AppCompatActivity() {
 
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val provider = if (providerGroup.checkedRadioButtonId == R.id.providerGoogle) {
-                    CloudProvider.GOOGLE
-                } else {
-                    CloudProvider.WEBDAV
-                }
-
-                val request = when (provider) {
+                when (selectedProvider) {
                     CloudProvider.WEBDAV -> {
                         val url = etWebDavUrl.text?.toString()?.trim().orEmpty()
                         val username = etWebDavUser.text?.toString()?.trim().orEmpty()
                         val password = etWebDavPassword.text?.toString()?.trim().orEmpty()
+
                         if (url.isBlank()) {
                             etWebDavUrl.error = getString(R.string.cloud_webdav_endpoint)
                             return@setOnClickListener
                         }
-                        CloudSyncRequest(
-                            provider = CloudProvider.WEBDAV,
-                            endpoint = url,
-                            username = username,
-                            password = password
-                        )
+
+                        prefs.edit().apply {
+                            putString("${KEY_CLOUD_PREFIX}provider", selectedProvider.name)
+                            putString("${KEY_CLOUD_PREFIX}webdav_url", url)
+                            putString("${KEY_CLOUD_PREFIX}webdav_user", username)
+                        }.apply()
+
+                        dialog.dismiss()
+                        startCloudBackup(isWebDav = true, url = url, username = username, password = password)
                     }
-                    CloudProvider.GOOGLE -> {
-                        val email = googleAccount?.email ?: etGoogleEmail.text?.toString()?.trim().orEmpty()
-                        if (googleAccount == null) {
+
+                    CloudProvider.GOOGLE_DRIVE -> {
+                        val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
+
+                        if (account == null) {
                             Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
-                            pendingGoogleRequest = CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
                             launchGoogleSignIn(forceInteractive = true)
                             return@setOnClickListener
                         }
-                        CloudSyncRequest(provider = CloudProvider.GOOGLE, email = email)
+
+                        googleAccount = account
+
+                        prefs.edit().apply {
+                            putString("${KEY_CLOUD_PREFIX}provider", selectedProvider.name)
+                            putString("${KEY_CLOUD_PREFIX}google_email", account.email)
+                        }.apply()
+
+                        dialog.dismiss()
+                        startCloudBackup(isWebDav = false)
+                    }
+
+                    else -> {
+                        Toast.makeText(this, "${selectedProvider.name} 功能正在开发中", Toast.LENGTH_SHORT).show()
                     }
                 }
-
-                if (!isNetworkAvailable()) {
-                    Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-
-                prefs.edit().apply {
-                    putString("${KEY_CLOUD_PREFIX}provider", provider.name)
-                    putString("${KEY_CLOUD_PREFIX}webdav_url", request.endpoint)
-                    putString("${KEY_CLOUD_PREFIX}webdav_user", request.username)
-                    putString("${KEY_CLOUD_PREFIX}google_email", request.email)
-                }.apply()
-
-                startCloudBackup(request)
-                dialog.dismiss()
             }
         }
 
         dialog.show()
+    }
+
+    private fun refreshOAuthUi(provider: CloudProvider, statusView: TextView, actionButton: MaterialButton) {
+        when (provider) {
+            CloudProvider.GOOGLE_DRIVE -> {
+                val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
+                googleAccount = account
+                if (account != null) {
+                    statusView.text = getString(R.string.cloud_google_signed_in, account.email)
+                    actionButton.text = getString(R.string.cloud_google_switch)
+                } else {
+                    statusView.text = getString(R.string.cloud_google_not_signed_in)
+                    actionButton.text = getString(R.string.cloud_google_sign_in)
+                }
+            }
+            else -> {
+                statusView.text = "请使用 ${getString(provider.displayNameRes)} 登录"
+                actionButton.text = "登录"
+            }
+        }
+    }
+
+    private suspend fun testCloudConnection(provider: CloudProvider, view: View): Pair<Boolean, String> {
+        return try {
+            when (provider) {
+                CloudProvider.WEBDAV -> {
+                    val url = view.findViewById<TextInputEditText>(R.id.etWebDavUrl).text?.toString()?.trim().orEmpty()
+                    val username = view.findViewById<TextInputEditText>(R.id.etWebDavUser).text?.toString()?.trim().orEmpty()
+                    val password = view.findViewById<TextInputEditText>(R.id.etWebDavPassword).text?.toString()?.trim().orEmpty()
+
+                    if (url.isBlank()) {
+                        return Pair(false, "请输入 WebDAV 地址")
+                    }
+
+                    // Test connection with CloudSyncManager
+                    val config = CloudSyncManager.WebDavConfig(url, username, password)
+                    cloudSyncManager.testWebDavConnection(config)
+                }
+
+                CloudProvider.GOOGLE_DRIVE -> {
+                    if (googleAccount == null) {
+                        return Pair(false, "请先登录 Google 账号")
+                    }
+                    Pair(true, "Google 账号已登录")
+                }
+
+                else -> {
+                    Pair(false, "该功能正在开发中")
+                }
+            }
+        } catch (e: Exception) {
+            Pair(false, e.message ?: "未知错误")
+        }
     }
 
     private fun refreshGoogleUi(statusView: TextView, emailField: TextInputEditText, actionButton: MaterialButton) {
@@ -1950,236 +2159,143 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun requestGoogleDriveConsent(account: GoogleSignInAccount) {
+        android.util.Log.d("GoogleSignIn", "Requesting Drive consent for ${account.email}")
         if (!::googleSignInClient.isInitialized) {
             initGoogleSignIn()
         }
-        GoogleSignIn.requestPermissions(
-            this,
-            GOOGLE_PERMISSIONS_REQUEST,
-            account,
-            Scope(GOOGLE_DRIVE_SCOPE)
-        )
+        try {
+            GoogleSignIn.requestPermissions(
+                this,
+                GOOGLE_PERMISSIONS_REQUEST,
+                account,
+                Scope(GOOGLE_DRIVE_SCOPE)
+            )
+            android.util.Log.d("GoogleSignIn", "Permission request launched")
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleSignIn", "Failed to request permissions", e)
+            Toast.makeText(this, "无法请求权限: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
-    private fun startCloudBackup(request: CloudSyncRequest) {
-        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
-        val progressMessage = if (request.provider == CloudProvider.GOOGLE) {
-            getString(R.string.cloud_google_uploading)
-        } else {
-            getString(R.string.cloud_sync_ready, fileName)
-        }
-        val progress = showSyncProgressDialog(progressMessage)
+    // ===== NEW CLOUD SYNC IMPLEMENTATION USING CloudSyncManager =====
 
-        Thread {
-            val result = when (request.provider) {
-                CloudProvider.WEBDAV -> uploadViaWebDav(request, content)
-                CloudProvider.GOOGLE -> backupToGoogleDrive(request, content)
+    private val cloudSyncManager by lazy { CloudSyncManager(applicationContext) }
+    private var syncProgressDialog: AlertDialog? = null
+
+    private fun startCloudBackup(isWebDav: Boolean, url: String = "", username: String = "", password: String = "") {
+        if (!isNetworkAvailable()) {
+            Toast.makeText(this, R.string.cloud_network_required, Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val content = if (isEditMode) etCodeContent.text.toString() else fileContent
+
+        if (isWebDav) {
+            startWebDavSync(url, username, password, content)
+        } else {
+            startGoogleDriveSync(content)
+        }
+    }
+
+    private fun startWebDavSync(url: String, username: String, password: String, content: String) {
+        val config = CloudSyncManager.WebDavConfig(url, username, password)
+
+        syncProgressDialog = createSyncProgressDialog("Preparing WebDAV sync...")
+        syncProgressDialog?.show()
+
+        lifecycleScope.launch {
+            val result = cloudSyncManager.syncToWebDav(config, fileName, content) { progress ->
+                runOnUiThread {
+                    updateSyncProgress(progress.message)
+                }
             }
 
             runOnUiThread {
-                progress.dismiss()
-                if (result.success) {
-                    lastCloudSyncTime = System.currentTimeMillis()
-                    val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                    prefs.edit()
-                        .putLong("$KEY_CLOUD_PREFIX$fileName", lastCloudSyncTime)
-                        .putString("${KEY_CLOUD_PREFIX}last_target", result.target)
-                        .apply()
-                    Toast.makeText(
-                        this,
-                        getString(R.string.cloud_sync_success_detail, fileName, result.target),
-                        Toast.LENGTH_LONG
-                    ).show()
-                } else {
-                    Toast.makeText(
-                        this,
-                        getString(R.string.cloud_sync_failed, result.error ?: getString(R.string.unknown_error)),
-                        Toast.LENGTH_LONG
-                    ).show()
-                }
+                syncProgressDialog?.dismiss()
+                handleSyncResult(result)
             }
-        }.start()
-    }
-
-    private fun uploadViaWebDav(request: CloudSyncRequest, content: String): CloudSyncResult {
-        val endpoint = request.endpoint?.trim()
-            ?.ifEmpty { null }
-            ?: return CloudSyncResult(false, "WebDAV", getString(R.string.cloud_webdav_endpoint))
-
-        val targetUrl = buildWebDavTarget(endpoint)
-        ensureWebDavPath(targetUrl, request)?.let { return it }
-
-        return try {
-            val url = URL(targetUrl)
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "PUT"
-                connectTimeout = 12000
-                readTimeout = 12000
-                doInput = true
-                doOutput = true
-                setRequestProperty("User-Agent", "ABB/CloudSync")
-                setRequestProperty("Content-Type", "text/plain; charset=utf-8")
-                applyBasicAuth(request)
-            }
-
-            connection.outputStream.use { stream ->
-                stream.write(content.toByteArray(Charsets.UTF_8))
-            }
-
-            val responseCode = connection.responseCode
-            val target = connection.url.toString()
-            val success = responseCode in 200..299
-            val errorDetail = if (!success) {
-                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
-                when (responseCode) {
-                    HttpURLConnection.HTTP_UNAUTHORIZED -> getString(R.string.cloud_webdav_auth_failed)
-                    HttpURLConnection.HTTP_NOT_FOUND -> getString(R.string.cloud_webdav_missing_path)
-                    402 -> getString(R.string.cloud_webdav_payment_required)
-                    else -> detail ?: "HTTP $responseCode"
-                }
-            } else null
-            connection.disconnect()
-            if (success) CloudSyncResult(true, target) else CloudSyncResult(false, target, errorDetail)
-        } catch (e: Exception) {
-            CloudSyncResult(false, targetUrl, e.localizedMessage ?: e.message ?: "WebDAV error")
         }
     }
 
-    private fun buildWebDavTarget(endpoint: String): String {
-        val encodedName = URLEncoder.encode(fileName, Charsets.UTF_8.name())
-        val lastSegment = endpoint.substringAfterLast('/')
-        val alreadyHasFile = lastSegment.equals(fileName, ignoreCase = true) || lastSegment.equals(encodedName, ignoreCase = true)
-        return when {
-            endpoint.endsWith("/") -> endpoint + encodedName
-            alreadyHasFile -> endpoint
-            lastSegment.contains('.') -> endpoint
-            else -> "$endpoint/$encodedName"
-        }
-    }
-
-    private fun ensureWebDavPath(targetUrl: String, request: CloudSyncRequest): CloudSyncResult? {
-        return try {
-            val url = URL(targetUrl)
-            val path = url.path ?: return null
-            val lastSlash = path.lastIndexOf('/')
-            if (lastSlash <= 0) return null
-            val dirPath = path.substring(0, lastSlash)
-            if (dirPath.isBlank() || dirPath == "/") return null
-
-            val segments = dirPath.split('/').filter { it.isNotBlank() }
-            var cumulativePath = ""
-            for (segment in segments) {
-                cumulativePath += "/$segment"
-                val dirUrl = URL(url.protocol, url.host, url.port, cumulativePath)
-                val connection = (dirUrl.openConnection() as HttpURLConnection).apply {
-                    requestMethod = "MKCOL"
-                    connectTimeout = 12000
-                    readTimeout = 12000
-                    doInput = true
-                    setRequestProperty("User-Agent", "ABB/CloudSync")
-                    applyBasicAuth(request)
-                }
-
-                val responseCode = connection.responseCode
-                val detail = connection.errorStream?.bufferedReader()?.use { it.readText() }?.takeIf { it.isNotBlank() }
-                connection.disconnect()
-                when (responseCode) {
-                    201, 200, 204, HttpURLConnection.HTTP_CONFLICT, HttpURLConnection.HTTP_BAD_METHOD -> {
-                        // Created successfully or already exists/unsupported (which implies it exists)
-                    }
-                    HttpURLConnection.HTTP_UNAUTHORIZED -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_auth_failed))
-                    HttpURLConnection.HTTP_NOT_FOUND -> return CloudSyncResult(false, targetUrl, detail ?: getString(R.string.cloud_webdav_missing_path))
-                    402 -> return CloudSyncResult(false, targetUrl, getString(R.string.cloud_webdav_payment_required))
-                    else -> return CloudSyncResult(false, targetUrl, detail ?: getString(R.string.cloud_webdav_missing_path))
-                }
-            }
-            null
-        } catch (e: Exception) {
-            CloudSyncResult(false, targetUrl, e.localizedMessage ?: e.message ?: getString(R.string.cloud_webdav_missing_path))
-        }
-    }
-
-    private fun HttpURLConnection.applyBasicAuth(request: CloudSyncRequest) {
-        if (!request.username.isNullOrBlank()) {
-            val auth = "${request.username}:${request.password ?: ""}"
-            val encoded = Base64.encodeToString(auth.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-            setRequestProperty("Authorization", "Basic $encoded")
-        }
-    }
-
-    private fun backupToGoogleDrive(request: CloudSyncRequest, content: String): CloudSyncResult {
+    private fun startGoogleDriveSync(content: String) {
         val account = googleAccount ?: GoogleSignIn.getLastSignedInAccount(this)
-        val email = account?.email ?: request.email ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
         if (account == null) {
-            pendingGoogleRequest = request
-            runOnUiThread { launchGoogleSignIn(forceInteractive = true) }
-            return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+            Toast.makeText(this, R.string.cloud_google_signin_required, Toast.LENGTH_SHORT).show()
+            launchGoogleSignIn(forceInteractive = true)
+            return
         }
 
         if (!GoogleSignIn.hasPermissions(account, Scope(GOOGLE_DRIVE_SCOPE))) {
-            pendingGoogleRequest = request
-            runOnUiThread { requestGoogleDriveConsent(account) }
-            return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_consent_required))
+            requestGoogleDriveConsent(account)
+            return
         }
 
-        val androidAccount = account.account ?: return CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_signin_required))
+        val config = CloudSyncManager.GoogleDriveConfig(account)
 
-        return try {
-            val token = GoogleAuthUtil.getToken(applicationContext, androidAccount, "oauth2:$GOOGLE_DRIVE_SCOPE")
-            val boundary = "gcx-${System.currentTimeMillis()}"
-            val meta = "{" + "\"name\":\"$fileName\",\"mimeType\":\"text/plain\"" + "}"
-            val payload = buildString {
-                append("--$boundary\r\n")
-                append("Content-Type: application/json; charset=UTF-8\r\n\r\n")
-                append(meta)
-                append("\r\n--$boundary\r\n")
-                append("Content-Type: text/plain; charset=UTF-8\r\n\r\n")
-                append(content)
-                append("\r\n--$boundary--")
+        syncProgressDialog = createSyncProgressDialog("Preparing Google Drive sync...")
+        syncProgressDialog?.show()
+
+        lifecycleScope.launch {
+            val result = cloudSyncManager.syncToGoogleDrive(config, fileName, content) { progress ->
+                runOnUiThread {
+                    updateSyncProgress(progress.message)
+                }
             }
 
-            val url = URL("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart")
-            val connection = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = 12000
-                readTimeout = 12000
-                doOutput = true
-                setRequestProperty("Authorization", "Bearer $token")
-                setRequestProperty("Content-Type", "multipart/related; boundary=$boundary")
-            }
-
-            connection.outputStream.use { stream ->
-                stream.write(payload.toByteArray(Charsets.UTF_8))
-            }
-
-            val success = connection.responseCode in 200..299
-            val target = "Google Drive ($email)"
-            connection.disconnect()
-            if (success) {
-                CloudSyncResult(true, target)
-            } else {
-                CloudSyncResult(false, target, "HTTP ${connection.responseCode}")
-            }
-        } catch (e: UserRecoverableAuthException) {
-            pendingGoogleRequest = request
             runOnUiThread {
-                Toast.makeText(this, R.string.cloud_google_consent_required, Toast.LENGTH_SHORT).show()
-                googleAuthRecoveryLauncher.launch(e.intent)
+                syncProgressDialog?.dismiss()
+                handleSyncResult(result)
             }
-            CloudSyncResult(false, "Google Drive", getString(R.string.cloud_google_consent_required))
-        } catch (e: Exception) {
-            CloudSyncResult(false, "Google Drive", e.localizedMessage ?: e.message ?: "Google backup error")
         }
     }
 
-    private fun showSyncProgressDialog(message: String): AlertDialog {
+    private fun handleSyncResult(result: CloudSyncManager.SyncResult) {
+        when (result) {
+            is CloudSyncManager.SyncResult.Success -> {
+                lastCloudSyncTime = System.currentTimeMillis()
+                val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putLong("$KEY_CLOUD_PREFIX$fileName", lastCloudSyncTime)
+                    .putString("${KEY_CLOUD_PREFIX}last_target", result.provider)
+                    .apply()
+
+                Toast.makeText(
+                    this,
+                    "${result.provider}: ${result.message}",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            is CloudSyncManager.SyncResult.Failure -> {
+                val errorMsg = "${result.provider}: ${result.error}"
+                Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
+
+                // Show retry option for retryable errors
+                if (result.retryable) {
+                    MaterialAlertDialogBuilder(this)
+                        .setTitle("Sync Failed")
+                        .setMessage("$errorMsg\n\nWould you like to retry?")
+                        .setPositiveButton("Retry") { _, _ ->
+                            performCloudSync()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            else -> {}
+        }
+    }
+
+    private fun createSyncProgressDialog(message: String): AlertDialog {
         val view = layoutInflater.inflate(R.layout.dialog_sync_progress, null)
         view.findViewById<TextView>(R.id.progressMessage)?.text = message
         return MaterialAlertDialogBuilder(this)
             .setView(view)
             .setCancelable(false)
             .create()
-            .also { it.show() }
+    }
+
+    private fun updateSyncProgress(message: String) {
+        syncProgressDialog?.findViewById<TextView>(R.id.progressMessage)?.text = message
     }
 
     private fun isNetworkAvailable(): Boolean {
@@ -2188,22 +2304,6 @@ class CodeViewerActivity : AppCompatActivity() {
         val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
         return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
     }
-
-    private data class CloudSyncRequest(
-        val provider: CloudProvider,
-        val endpoint: String? = null,
-        val username: String? = null,
-        val password: String? = null,
-        val email: String? = null
-    )
-
-    private data class CloudSyncResult(
-        val success: Boolean,
-        val target: String,
-        val error: String? = null
-    )
-
-    private enum class CloudProvider { WEBDAV, GOOGLE }
 
     private fun openCollaborationPanel() {
         val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
