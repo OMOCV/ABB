@@ -266,12 +266,23 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun initGoogleSignIn() {
-        val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
-            .requestEmail()
-            .requestScopes(Scope(Scopes.DRIVE_FILE))
-            .build()
-        googleSignInClient = GoogleSignIn.getClient(this, options)
-        googleAccount = GoogleSignIn.getLastSignedInAccount(this)
+        android.util.Log.d("GoogleSignIn", "Initializing Google Sign In")
+        try {
+            val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                .requestEmail()
+                .requestScopes(Scope(Scopes.DRIVE_FILE))
+                .build()
+            android.util.Log.d("GoogleSignIn", "GoogleSignInOptions created")
+
+            googleSignInClient = GoogleSignIn.getClient(this, options)
+            android.util.Log.d("GoogleSignIn", "GoogleSignInClient created")
+
+            googleAccount = GoogleSignIn.getLastSignedInAccount(this)
+            android.util.Log.d("GoogleSignIn", "Last signed in account: ${googleAccount?.email ?: "none"}")
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleSignIn", "Failed to initialize Google Sign In", e)
+            Toast.makeText(this, "Google 登录初始化失败: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun initViews() {
@@ -1825,17 +1836,60 @@ class CodeViewerActivity : AppCompatActivity() {
     }
 
     private fun launchGoogleSignIn(forceInteractive: Boolean = false) {
+        android.util.Log.d("GoogleSignIn", "launchGoogleSignIn called, forceInteractive=$forceInteractive")
+
+        // Check Google Play Services availability
+        val playServicesAvailable = try {
+            val resultCode = com.google.android.gms.common.GoogleApiAvailability.getInstance()
+                .isGooglePlayServicesAvailable(this)
+            android.util.Log.d("GoogleSignIn", "Play Services status: $resultCode")
+
+            if (resultCode != com.google.android.gms.common.ConnectionResult.SUCCESS) {
+                val errorMsg = when (resultCode) {
+                    com.google.android.gms.common.ConnectionResult.SERVICE_MISSING ->
+                        "Google Play Services 未安装"
+                    com.google.android.gms.common.ConnectionResult.SERVICE_VERSION_UPDATE_REQUIRED ->
+                        "Google Play Services 需要更新"
+                    com.google.android.gms.common.ConnectionResult.SERVICE_DISABLED ->
+                        "Google Play Services 已禁用"
+                    else -> "Google Play Services 不可用 (错误代码: $resultCode)"
+                }
+                Toast.makeText(this, errorMsg, Toast.LENGTH_LONG).show()
+                return
+            }
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("GoogleSignIn", "Error checking Play Services", e)
+            Toast.makeText(this, "无法检查 Google Play Services: ${e.message}", Toast.LENGTH_LONG).show()
+            false
+        }
+
+        if (!playServicesAvailable) return
+
         if (!::googleSignInClient.isInitialized) {
+            android.util.Log.d("GoogleSignIn", "Initializing Google Sign In client")
             initGoogleSignIn()
         }
 
         val startFlow: () -> Unit = {
-            googleSignInLauncher.launch(googleSignInClient.signInIntent)
+            android.util.Log.d("GoogleSignIn", "Launching sign-in intent")
+            try {
+                val signInIntent = googleSignInClient.signInIntent
+                android.util.Log.d("GoogleSignIn", "Sign-in intent created: $signInIntent")
+                googleSignInLauncher.launch(signInIntent)
+            } catch (e: Exception) {
+                android.util.Log.e("GoogleSignIn", "Failed to launch sign-in", e)
+                Toast.makeText(this, "无法启动 Google 登录: ${e.message}", Toast.LENGTH_LONG).show()
+            }
         }
 
         if (forceInteractive) {
+            android.util.Log.d("GoogleSignIn", "Signing out first for interactive flow")
             // Clear any cached session so the user always sees the account/consent sheet
-            googleSignInClient.signOut().addOnCompleteListener { startFlow() }
+            googleSignInClient.signOut().addOnCompleteListener { task ->
+                android.util.Log.d("GoogleSignIn", "Sign out complete, success=${task.isSuccessful}")
+                startFlow()
+            }
         } else {
             startFlow()
         }

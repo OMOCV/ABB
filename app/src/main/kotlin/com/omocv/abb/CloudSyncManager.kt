@@ -67,7 +67,7 @@ class CloudSyncManager(private val context: Context) {
                 onProgress(SyncResult.Progress("WebDAV", "Connecting to server... (Attempt ${attempt + 1}/$MAX_RETRIES)", 10))
 
                 val targetUrl = normalizeWebDavUrl(config.url, fileName)
-                Log.d(TAG, "Target URL: $targetUrl")
+                Log.d(TAG, "WebDAV sync - Input URL: ${config.url}, Target URL: $targetUrl")
 
                 // Step 1: Ensure parent directories exist
                 onProgress(SyncResult.Progress("WebDAV", "Checking directories...", 20))
@@ -343,10 +343,17 @@ class CloudSyncManager(private val context: Context) {
                     val action = if (isUpdate) "updated" else "created"
                     SyncResult.Success("WebDAV", null, "File $action successfully at $targetUrl")
                 }
-                401 -> SyncResult.Failure("WebDAV", "Authentication failed", false)
-                403 -> SyncResult.Failure("WebDAV", "Permission denied", false)
-                404 -> SyncResult.Failure("WebDAV", "Path not found", true)
-                507 -> SyncResult.Failure("WebDAV", "Insufficient storage", false)
+                401 -> SyncResult.Failure("WebDAV", "认证失败 - 请检查用户名/密码", false)
+                403 -> SyncResult.Failure("WebDAV", "权限被拒绝 - 请检查文件夹权限", false)
+                404 -> {
+                    val hint = if (config.url.contains("jianguoyun.com")) {
+                        "路径不存在 - 坚果云需要完整路径，如：https://dav.jianguoyun.com/dav/ABB/backup.mod"
+                    } else {
+                        "路径不存在 - 请确保目录已创建或使用完整的文件路径"
+                    }
+                    SyncResult.Failure("WebDAV", hint, true)
+                }
+                507 -> SyncResult.Failure("WebDAV", "存储空间不足", false)
                 else -> SyncResult.Failure("WebDAV", "Upload failed: HTTP $responseCode - $responseMessage", true)
             }
         } catch (e: Exception) {
