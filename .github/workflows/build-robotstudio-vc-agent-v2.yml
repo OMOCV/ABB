@@ -20,26 +20,37 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Capture reconstructed Base64
+      - name: Reconstruct and verify source archive
         shell: pwsh
         run: |
           @'
           from pathlib import Path
-          import glob, re
+          import base64, glob, hashlib, re
           source = ''.join(Path(p).read_text(encoding='utf-8') for p in sorted(glob.glob('.ci/source.part*')))
           source = re.sub(r'\s', '', source)
-          Path('pre-base64.txt').write_text(source, encoding='ascii')
-          Path('capture-report.txt').write_text(f'length={len(source)}\n', encoding='utf-8')
-          '@ | Set-Content -Path capture_source.py -Encoding UTF8
-          python capture_source.py
-      - name: Upload exact reconstructed text
+          edits = [[8242,8243,"p"],[16649,16649,"HVka"],[16650,16655,"8v"],[16657,16659,"QJ"],[16661,16661,"MD2GJqA9hianV4C"],[16662,16679,""],[16681,16686,""],[16687,16694,""],[16700,16701,"E6QMAAFBLAwQKAAAAAACCGf"],[16702,16705,"c"],[22774,22774,"24vQUJCLlZDQ"],[22775,22776,"dlbnQ"],[22777,22797,"cH"],[22798,22798,"x"],[22800,22800,"Q"],[23606,23613,"HVk"],[23615,23616,"8vUml"],[23617,23765,""],[23768,23768,"uL"],[23769,23784,"N"],[23786,23793,"nRy"],[23795,23795,"xIZWxwVGV"],[23796,23796,"dHM"],[23854,23861,""],[23862,23863,"Kan2ju"],[23865,23868,"AAcQE"],[23871,23872,"0"],[23890,23890,"D"],[23891,23892,""],[23932,23932,"SaWJib24vUmliYm9uLnhtbFVU"],[23933,23939,"QADA9hian"],[23940,23953,"4Cw"],[23954,23969,"BB"],[23975,23976,"E6QMAAFBLAQIeAxQAAAAIAIIZ+FwFcIoqhAcAANoZAAA"],[23978,23978,"BgAAAAAAAEAAACkgYE1AABzcmMvQUJCLlZDQWdlbnQuUm9ib3RTdHVkaW8vQWRkSW5FbnRyeS5jc1VUBQADA9hianV4C"],[23980,23984,"B"],[23986,23990,""],[23992,23992,"AAAE6QMAAFBLAQIeAxQ"],[24074,24085,"H"],[24087,24087,"aW8vQUJCLlZDQWdlbnQuUm9ib3RTdHVkaW8uY3"],[24088,24113,"w"],[24114,24120,"m9q"],[24122,24124,"QF"],[24126,24136,"MD2GJqdXgL"],[24138,24140,"EE"],[24145,24149,"ATpAw"],[24151,24151,"UEsF"],[24152,24157,"g"],[24162,24162,"SA"],[24165,24166,"K"],[24167,24171,"c"]]
+          for start, end, replacement in reversed(edits):
+              source = source[:start] + replacement + source[end:]
+          raw = base64.b64decode(source, validate=True)
+          digest = hashlib.sha256(raw).hexdigest()
+          expected = '154080f1e90876a71c0981028b436ad6c9c0f0415385bc1e060409e879f59d45'
+          if digest != expected:
+              raise SystemExit(f'Source archive hash mismatch: {digest}')
+          Path('RobotStudioVCAgent-source.zip').write_bytes(raw)
+          print(f'Verified source SHA256: {digest}')
+          '@ | Set-Content -Path reconstruct_source.py -Encoding UTF8
+          python reconstruct_source.py
+      - name: Inspect source archive
+        shell: pwsh
+        run: |
+          Expand-Archive -Path RobotStudioVCAgent-source.zip -DestinationPath RobotStudioVCAgent -Force
+          if (!(Test-Path RobotStudioVCAgent/build/Build-Package.ps1)) { throw 'Source archive does not contain build script' }
+      - name: Build and package
+        shell: pwsh
+        run: ./RobotStudioVCAgent/build/Build-Package.ps1
+      - name: Upload install package
         uses: actions/upload-artifact@v4
         with:
-          name: exact-reconstructed-base64
-          path: |
-            pre-base64.txt
-            capture-report.txt
+          name: ABB-RobotStudio-VC-Full-Agent-v2.0
+          path: RobotStudioVCAgent/out/*
           if-no-files-found: error
-      - name: Stop after capture
-        shell: pwsh
-        run: throw 'Diagnostic capture completed intentionally.'
