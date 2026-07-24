@@ -45,6 +45,32 @@ jobs:
         run: |
           Expand-Archive -Path RobotStudioVCAgent-source.zip -DestinationPath RobotStudioVCAgent -Force
           if (!(Test-Path RobotStudioVCAgent/build/Build-Package.ps1)) { throw 'Source archive does not contain build script' }
+      - name: Apply verified RWS endpoint corrections
+        shell: pwsh
+        run: |
+          @'
+          from pathlib import Path
+          path = Path('RobotStudioVCAgent/package/common/ABB.VCAgent.ps1')
+          text = path.read_text(encoding='utf-8-sig')
+          replacements = {
+              "Invoke-RwsAction \"/rw/iosystem/signals/$p\" 'set-simulated' @{simulated='true'}": "Invoke-RwsAction \"/rw/iosystem/signals/$p\" 'set' @{lstate='simulated'}",
+              "Invoke-RwsAction \"/rw/iosystem/signals/$p\" 'set-simulated' @{simulated='false'}": "Invoke-RwsAction \"/rw/iosystem/signals/$p\" 'set' @{lstate='not simulated'}",
+              "Invoke-RwsAction \"/rw/iosystem/signals/$p\" 'pulse' @{pulses='1';activepulse='200';passivepulse='200'}": "Invoke-RwsAction \"/rw/iosystem/signals/$p\" 'set' @{mode='pulse';Pulses='1';ActivePulse='200';PassivePulse='200'}",
+              "Invoke-RwsAction \"/rw/iosystem/signals/$p\" 'invert' @{}": "Invoke-RwsAction \"/rw/iosystem/signals/$p\" 'set' @{mode='invert'}",
+              "Invoke-RwsAction \"/rw/rapid/tasks/$task/program\" 'saveprog' @{progpath=$txtRemoteFile.Text}": "Invoke-RwsAction \"/rw/rapid/tasks/$task/program\" 'save' @{path=$txtRemoteFile.Text}",
+              "$txtBackup=Add-Text $t '$HOME/Backups/AgentBackup' 175 22 500": "$txtBackup=Add-Text $t '/fileservice/$syspar/tempfolder/AgentBackup' 175 22 500",
+              "Invoke-RwsAction '/ctrl/backup' 'backup' @{'backup-path'=$txtBackup.Text;'include-mp'='false'}": "Invoke-RwsAction '/ctrl/backup' 'backup' @{backup=$txtBackup.Text;archive='false'}",
+              "Invoke-RwsAction '/ctrl/restart' 'restart' @{'restart-mode'=$cmbRestart.SelectedItem}": "Invoke-Rws -Method POST -Path '/ctrl' -Form @{'restart-mode'=$cmbRestart.SelectedItem}",
+              "Add-Button $t '设置运行周期' 545 115 { Invoke-RwsAction '/rw/rapid/execution' 'setcycle' @{cycle=$cmbCycle.SelectedItem} } 160": "Add-Button $t '设置运行周期' 545 115 { if($cmbCycle.SelectedItem -eq 'asis'){throw 'setcycle 仅支持 once 或 forever'}; Invoke-RwsAction '/rw/rapid/execution' 'setcycle' @{cycle=$cmbCycle.SelectedItem} } 160"
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'Expected source fragment not found: {old}')
+              text = text.replace(old, new)
+          path.write_text(text, encoding='utf-8-sig')
+          print(f'Applied {len(replacements)} RWS corrections to {path}')
+          '@ | Set-Content -Path patch_rws.py -Encoding UTF8
+          python patch_rws.py
       - name: Build and package
         shell: pwsh
         run: ./RobotStudioVCAgent/build/Build-Package.ps1
