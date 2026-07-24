@@ -1,0 +1,32 @@
+name: Build RobotStudio VC Agent v2.0
+
+on:
+  push:
+    branches:
+      - build/robotstudio-vc-agent-v2
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Expand source
+        shell: pwsh
+        run: |
+          Expand-Archive -Path ./RobotStudioVCAgent-source.zip -DestinationPath ./RobotStudioVCAgent -Force
+      - name: Build and package
+        shell: pwsh
+        run: ./RobotStudioVCAgent/build/Build-Package.ps1
+      - name: Upload install package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ABB-RobotStudio-VC-Full-Agent-v2.0
+          path: RobotStudioVCAgent/out/*
+          if-no-files-found: error
