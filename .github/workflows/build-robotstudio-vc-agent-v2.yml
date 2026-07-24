@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Reconstruct and verify source archive
+      - name: Reconstruct and repair source archive
         shell: pwsh
         run: |
           $parts = Get-ChildItem .ci/source.part* | Sort-Object Name
@@ -35,9 +35,20 @@ jobs:
             $base64 = $base64.Substring(0, $start) + $replacement + $base64.Substring($end)
           }
           [IO.File]::WriteAllBytes('RobotStudioVCAgent-source.zip', [Convert]::FromBase64String($base64))
+          (Get-FileHash RobotStudioVCAgent-source.zip -Algorithm SHA256).Hash.ToLowerInvariant() | Set-Content repaired-sha256.txt
+      - name: Upload repaired archive for byte verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: repaired-source-debug
+          path: |
+            RobotStudioVCAgent-source.zip
+            repaired-sha256.txt
+          if-no-files-found: error
+      - name: Verify source archive
+        shell: pwsh
+        run: |
           $hash = (Get-FileHash RobotStudioVCAgent-source.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           if ($hash -ne '154080f1e90876a71c0981028b436ad6c9c0f0415385bc1e060409e879f59d45') { throw "Source archive hash mismatch after repair: $hash" }
-          Write-Host "Verified source SHA256: $hash"
       - name: Inspect source archive
         shell: pwsh
         run: |
