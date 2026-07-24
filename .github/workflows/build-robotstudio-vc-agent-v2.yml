@@ -20,7 +20,7 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Reconstruct and inspect source
+      - name: Reconstruct source archive
         shell: pwsh
         run: |
           $parts = Get-ChildItem .ci/source.part* | Sort-Object Name
@@ -28,6 +28,15 @@ jobs:
           [IO.File]::WriteAllBytes('RobotStudioVCAgent-source.zip', [Convert]::FromBase64String($base64))
           $hash = (Get-FileHash RobotStudioVCAgent-source.zip -Algorithm SHA256).Hash.ToLowerInvariant()
           Write-Host "Reconstructed source SHA256: $hash"
+      - name: Upload reconstructed archive for verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconstructed-source-debug
+          path: RobotStudioVCAgent-source.zip
+          if-no-files-found: error
+      - name: Inspect source archive
+        shell: pwsh
+        run: |
           Expand-Archive -Path RobotStudioVCAgent-source.zip -DestinationPath RobotStudioVCAgent -Force
           if (!(Test-Path RobotStudioVCAgent/build/Build-Package.ps1)) { throw 'Source archive does not contain build script' }
       - name: Build and package
