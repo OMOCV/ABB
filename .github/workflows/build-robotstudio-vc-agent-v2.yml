@@ -20,26 +20,50 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.x'
-      - name: Reconstruct and verify source archive
+      - name: Reconstruct source archive
+        id: reconstruct
+        continue-on-error: true
         shell: pwsh
         run: |
           @'
           from pathlib import Path
-          import base64, glob, hashlib, json, re
-          source = ''.join(Path(p).read_text(encoding='utf-8') for p in sorted(glob.glob('.ci/source.part*')))
-          source = re.sub(r'\s', '', source)
-          edits = [[8242,8243,"p"],[16649,16649,"HVka"],[16650,16655,"8v"],[16657,16659,"QJ"],[16661,16669,"MD2GJq"],[16670,16679,"9hianV4Cw"],[16681,16686,""],[16687,16694,""],[16700,16701,"E6QMAAFBLAwQKAAAAAACCGf"],[16702,16705,"c"],[22774,22781,"24v"],[22782,22793,"UJC"],[22794,22794,"lZDQWdlb"],[22795,22797,"QucH"],[22798,22798,"x"],[22800,22800,"Q"],[23606,23613,"HVk"],[23615,23620,"8"],[23621,23636,""],[23637,23658,""],[23659,23762,""],[23763,23765,"i"],[23768,23777,"u"],[23778,23784,"0N"],[23786,23793,"nRy"],[23795,23795,"xIZWxwVGV"],[23796,23796,"dHM"],[23854,23861,""],[23862,23863,"Kan2ju"],[23865,23868,"AAcQE"],[23871,23872,"0"],[23890,23890,"D"],[23891,23892,""],[23932,23936,"SaW"],[23937,23937,"i"],[23938,23957,""],[23958,23964,"4vUmliYm9u"],[23965,23965,"nhtbFVUBQ"],[23966,23966,"D"],[23967,23969,"9hianV4CwABB"],[23975,23979,"E6QM"],[23981,23989,""],[23990,23990,"BLAQIeAxQ"],[23992,23992,"AAIAIIZ+FwFcIoqhAcAANoZAAApABgAAAAAAAEAAACkgYE1AABzcmMvQUJCLlZDQWdlbnQuUm9ib3RTdWRpby9QWRkSW5FbnRyeS5jc1VUBQADA9hianV4CwABBAAAAAAE6QMAAFBLAQIeAxQ"],[24074,24085,"H"],[24087,24106,"a"],[24107,24109,"8vQUJCLlZDQWdl"],[24110,24117,"nQuUm9i"],[24118,24120,"3RTdHVkaW8uY3Nwcm9q"],[24122,24124,"QF"],[24126,24136,"MD2GJqdXgL"],[24138,24140,"EE"],[24145,24149,"ATpAw"],[24151,24155,""],[24156,24157,"EsFBg"],[24162,24162,"SA"],[24165,24166,"K"],[24167,24171,"c"]]
-          for start, end, replacement in reversed(edits):
-              source = source[:start] + replacement + source[end:]
-          raw = base64.b64decode(source, validate=True)
-          digest = hashlib.sha256(raw).hexdigest()
-          expected = '154080f1e90876a71c0981028b436ad6c9c0f0415385bc1e060409e879f59d45'
-          if digest != expected:
-              raise SystemExit(f'Source archive hash mismatch after repair: {digest}')
-          Path('RobotStudioVCAgent-source.zip').write_bytes(raw)
-          print(f'Verified source SHA256: {digest}')
+          import base64, glob, hashlib, re, traceback
+          try:
+              source = ''.join(Path(p).read_text(encoding='utf-8') for p in sorted(glob.glob('.ci/source.part*')))
+              source = re.sub(r'\s', '', source)
+              edits = [[8242,8243,"p"],[16649,16649,"HVka"],[16650,16655,"8v"],[16657,16659,"QJ"],[16661,16669,"MD2GJq"],[16670,16679,"9hianV4Cw"],[16681,16686,""],[16687,16694,""],[16700,16701,"E6QMAAFBLAwQKAAAAAACCGf"],[16702,16705,"c"],[22774,22781,"24v"],[22782,22793,"UJC"],[22794,22794,"lZDQWdlb"],[22795,22797,"QucH"],[22798,22798,"x"],[22800,22800,"Q"],[23606,23613,"HVk"],[23615,23620,"8"],[23621,23636,""],[23637,23658,""],[23659,23762,""],[23763,23765,"i"],[23768,23777,"u"],[23778,23784,"0N"],[23786,23793,"nRy"],[23795,23795,"xIZWxwVGV"],[23796,23796,"dHM"],[23854,23861,""],[23862,23863,"Kan2ju"],[23865,23868,"AAcQE"],[23871,23872,"0"],[23890,23890,"D"],[23891,23892,""],[23932,23936,"SaW"],[23937,23937,"i"],[23938,23957,""],[23958,23964,"4vUmliYm9u"],[23965,23965,"nhtbFVUBQ"],[23966,23966,"D"],[23967,23969,"9hianV4CwABB"],[23975,23979,"E6QM"],[23981,23989,""],[23990,23990,"BLAQIeAxQ"],[23992,23992,"AAIAIIZ+FwFcIoqhAcAANoZAAApABgAAAAAAAEAAACkgYE1AABzcmMvQUJCLlZDQWdlbnQuUm9ib3RTdWRpby9QWRkSW5FbnRyeS5jc1VUBQADA9hianV4CwABBAAAAAAE6QMAAFBLAQIeAxQ"],[24074,24085,"H"],[24087,24106,"a"],[24107,24109,"8vQUJCLlZDQWdl"],[24110,24117,"nQuUm9i"],[24118,24120,"3RTdHVkaW8uY3Nwcm9q"],[24122,24124,"QF"],[24126,24136,"MD2GJqdXgL"],[24138,24140,"EE"],[24145,24149,"ATpAw"],[24151,24155,""],[24156,24157,"EsFBg"],[24162,24162,"SA"],[24165,24166,"K"],[24167,24171,"c"]]
+              for start, end, replacement in reversed(edits):
+                  source = source[:start] + replacement + source[end:]
+              raw = base64.b64decode(source, validate=True)
+              digest = hashlib.sha256(raw).hexdigest()
+              Path('RobotStudioVCAgent-source.zip').write_bytes(raw)
+              Path('repair-report.txt').write_text(f'length={len(source)}\nbytes={len(raw)}\nsha256={digest}\n', encoding='utf-8')
+              if digest != '154080f1e90876a71c0981028b436ad6c9c0f0415385bc1e060409e879f59d45':
+                  raise RuntimeError(f'Source archive hash mismatch after repair: {digest}')
+          except Exception:
+              Path('repair-error.txt').write_text(traceback.format_exc(), encoding='utf-8')
+              raise
           '@ | Set-Content -Path repair_source.py -Encoding UTF8
-          python repair_source.py
+          python --version *>&1 | Set-Content python-version.txt
+          python repair_source.py *>&1 | Set-Content repair-console.txt
+          exit $LASTEXITCODE
+      - name: Upload reconstruction diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reconstruction-diagnostics
+          path: |
+            repair_source.py
+            python-version.txt
+            repair-console.txt
+            repair-report.txt
+            repair-error.txt
+            RobotStudioVCAgent-source.zip
+          if-no-files-found: warn
+      - name: Enforce reconstruction success
+        shell: pwsh
+        run: |
+          if ('${{ steps.reconstruct.outcome }}' -ne 'success') { throw 'Source reconstruction failed; see reconstruction-diagnostics artifact.' }
       - name: Inspect source archive
         shell: pwsh
         run: |
