@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.omocv.abb"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.omocv.abb"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 6
         versionName = "2.2.1"
 
